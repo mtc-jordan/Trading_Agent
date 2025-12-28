@@ -30,6 +30,43 @@ import { runPortfolioBacktest, runQuickPortfolioAnalysis, PortfolioConfig } from
 import { analyzeMarketRegime, getQuickRegime, RegimeConfig } from "./services/regimeSwitching";
 import { calculateGreeks, calculateImpliedVolatility, generateGreeksVisualization, generateOptionChain, analyzeStrategy, OptionInput } from "./services/optionsGreeks";
 import { analyzeSentiment, getQuickSentiment, analyzeBatchSentiment } from "./services/sentimentAnalysis";
+import { 
+  getCryptoPrice, 
+  getCryptoPrices,
+  getCryptoOHLCV,
+  getCryptoIndicators, 
+  analyzeCrypto,
+  getDeFiProtocols 
+} from "./services/cryptoTrading";
+import {
+  createPaperAccount,
+  getPaperAccount,
+  getUserPaperAccounts,
+  placePaperOrder,
+  getAccountPositions,
+  getAccountOrders,
+  getTradeHistory,
+  cancelOrder,
+  calculatePerformanceMetrics,
+  resetPaperAccount
+} from "./services/paperTrading";
+import {
+  createPriceAlert,
+  createRegimeAlert,
+  createSentimentAlert,
+  getUserPriceAlerts,
+  getUserRegimeAlerts,
+  getUserSentimentAlerts,
+  getAlertHistory,
+  togglePriceAlert,
+  toggleRegimeAlert,
+  toggleSentimentAlert,
+  deletePriceAlert,
+  deleteRegimeAlert,
+  deleteSentimentAlert,
+  markAlertAsRead,
+  getAlertSummary
+} from "./services/alertSystem";
 import { callDataApi } from "./_core/dataApi";
 import { getStockQuote, searchStocks, getCachedPrice, getAllCachedPrices, fetchStockPrice } from "./services/marketData";
 import { getUserEmailPreferences, updateUserEmailPreferences, testSendGridApiKey } from "./services/twilioEmail";
@@ -2733,6 +2770,271 @@ export const appRouter = router({
       .input(z.object({ symbols: z.array(z.string()).max(10) }))
       .mutation(async ({ input }) => {
         return analyzeBatchSentiment(input.symbols);
+      }),
+  }),
+
+  // Crypto Trading
+  crypto: router({
+    price: protectedProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ input }) => {
+        return getCryptoPrice(input.symbol);
+      }),
+
+    prices: protectedProcedure
+      .input(z.object({ symbols: z.array(z.string()).optional() }))
+      .query(async ({ input }) => {
+        return getCryptoPrices(input.symbols);
+      }),
+
+    ohlcv: protectedProcedure
+      .input(z.object({ symbol: z.string(), interval: z.enum(['1h', '4h', '1d', '1w']).optional(), limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        return getCryptoOHLCV(input.symbol, input.interval, input.limit);
+      }),
+
+    indicators: protectedProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ input }) => {
+        return getCryptoIndicators(input.symbol);
+      }),
+
+    analysis: protectedProcedure
+      .input(z.object({ symbol: z.string() }))
+      .mutation(async ({ input }) => {
+        return analyzeCrypto(input.symbol);
+      }),
+
+    defiProtocols: protectedProcedure
+      .query(async () => {
+        return getDeFiProtocols();
+      }),
+  }),
+
+  // Paper Trading
+  paperTrading: router({
+    createAccount: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        initialBalance: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createPaperAccount(String(ctx.user.id), input.name, input.initialBalance);
+      }),
+
+    getAccount: protectedProcedure
+      .input(z.object({ accountId: z.string() }))
+      .query(async ({ input }) => {
+        return getPaperAccount(input.accountId);
+      }),
+
+    listAccounts: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getUserPaperAccounts(String(ctx.user.id));
+      }),
+
+    placeOrder: protectedProcedure
+      .input(z.object({
+        accountId: z.string(),
+        symbol: z.string(),
+        assetType: z.enum(['stock', 'crypto']),
+        side: z.enum(['buy', 'sell']),
+        type: z.enum(['market', 'limit', 'stop_loss', 'take_profit', 'stop_limit']),
+        quantity: z.number(),
+        price: z.number().optional(),
+        stopPrice: z.number().optional(),
+        takeProfitPrice: z.number().optional(),
+        stopLossPrice: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return placePaperOrder(
+          input.accountId,
+          input.symbol,
+          input.assetType,
+          input.side,
+          input.type,
+          input.quantity,
+          {
+            price: input.price,
+            stopPrice: input.stopPrice,
+            takeProfitPrice: input.takeProfitPrice,
+            stopLossPrice: input.stopLossPrice,
+          }
+        );
+      }),
+
+    getPositions: protectedProcedure
+      .input(z.object({ accountId: z.string() }))
+      .query(async ({ input }) => {
+        return getAccountPositions(input.accountId);
+      }),
+
+    getOrders: protectedProcedure
+      .input(z.object({ accountId: z.string(), status: z.string().optional() }))
+      .query(async ({ input }) => {
+        return getAccountOrders(input.accountId, input.status as any);
+      }),
+
+    getTradeHistory: protectedProcedure
+      .input(z.object({ accountId: z.string() }))
+      .query(async ({ input }) => {
+        return getTradeHistory(input.accountId);
+      }),
+
+    cancelOrder: protectedProcedure
+      .input(z.object({ orderId: z.string() }))
+      .mutation(async ({ input }) => {
+        return cancelOrder(input.orderId);
+      }),
+
+    getPerformance: protectedProcedure
+      .input(z.object({ accountId: z.string() }))
+      .query(async ({ input }) => {
+        return calculatePerformanceMetrics(input.accountId);
+      }),
+
+    resetAccount: protectedProcedure
+      .input(z.object({ accountId: z.string() }))
+      .mutation(async ({ input }) => {
+        return resetPaperAccount(input.accountId);
+      }),
+  }),
+
+  // Alerts
+  alerts: router({
+    createPriceAlert: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        assetType: z.enum(['stock', 'crypto']),
+        alertType: z.enum(['price_above', 'price_below', 'percent_change', 'volume_spike']),
+        targetValue: z.number(),
+        message: z.string().optional(),
+        notifyEmail: z.boolean().optional(),
+        notifyPush: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createPriceAlert(
+          String(ctx.user.id),
+          input.symbol,
+          input.assetType,
+          input.alertType,
+          input.targetValue,
+          {
+            message: input.message,
+            notifyEmail: input.notifyEmail,
+            notifyPush: input.notifyPush,
+          }
+        );
+      }),
+
+    createRegimeAlert: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        toRegime: z.enum(['bull', 'bear', 'sideways', 'volatile']),
+        fromRegime: z.enum(['bull', 'bear', 'sideways', 'volatile']).optional(),
+        notifyEmail: z.boolean().optional(),
+        notifyPush: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createRegimeAlert(
+          String(ctx.user.id),
+          input.symbol,
+          input.toRegime,
+          {
+            fromRegime: input.fromRegime,
+            notifyEmail: input.notifyEmail,
+            notifyPush: input.notifyPush,
+          }
+        );
+      }),
+
+    createSentimentAlert: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        alertType: z.enum(['sentiment_bullish', 'sentiment_bearish', 'fear_greed_extreme', 'sentiment_shift']),
+        threshold: z.number().optional(),
+        notifyEmail: z.boolean().optional(),
+        notifyPush: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createSentimentAlert(
+          String(ctx.user.id),
+          input.symbol,
+          input.alertType,
+          {
+            threshold: input.threshold,
+            notifyEmail: input.notifyEmail,
+            notifyPush: input.notifyPush,
+          }
+        );
+      }),
+
+    getPriceAlerts: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getUserPriceAlerts(String(ctx.user.id));
+      }),
+
+    getRegimeAlerts: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getUserRegimeAlerts(String(ctx.user.id));
+      }),
+
+    getSentimentAlerts: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getUserSentimentAlerts(String(ctx.user.id));
+      }),
+
+    getHistory: protectedProcedure
+      .input(z.object({ limit: z.number().optional() }))
+      .query(async ({ ctx, input }) => {
+        return getAlertHistory(String(ctx.user.id), input.limit);
+      }),
+
+    togglePriceAlert: protectedProcedure
+      .input(z.object({ alertId: z.string(), isActive: z.boolean() }))
+      .mutation(async ({ input }) => {
+        return togglePriceAlert(input.alertId, input.isActive);
+      }),
+
+    toggleRegimeAlert: protectedProcedure
+      .input(z.object({ alertId: z.string(), isActive: z.boolean() }))
+      .mutation(async ({ input }) => {
+        return toggleRegimeAlert(input.alertId, input.isActive);
+      }),
+
+    toggleSentimentAlert: protectedProcedure
+      .input(z.object({ alertId: z.string(), isActive: z.boolean() }))
+      .mutation(async ({ input }) => {
+        return toggleSentimentAlert(input.alertId, input.isActive);
+      }),
+
+    deletePriceAlert: protectedProcedure
+      .input(z.object({ alertId: z.string() }))
+      .mutation(async ({ input }) => {
+        return deletePriceAlert(input.alertId);
+      }),
+
+    deleteRegimeAlert: protectedProcedure
+      .input(z.object({ alertId: z.string() }))
+      .mutation(async ({ input }) => {
+        return deleteRegimeAlert(input.alertId);
+      }),
+
+    deleteSentimentAlert: protectedProcedure
+      .input(z.object({ alertId: z.string() }))
+      .mutation(async ({ input }) => {
+        return deleteSentimentAlert(input.alertId);
+      }),
+
+    markAsRead: protectedProcedure
+      .input(z.object({ alertHistoryId: z.string() }))
+      .mutation(async ({ input }) => {
+        return markAlertAsRead(input.alertHistoryId);
+      }),
+
+    getSummary: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getAlertSummary(String(ctx.user.id));
       }),
   }),
 });

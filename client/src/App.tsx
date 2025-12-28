@@ -29,6 +29,9 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
+import CryptoTrading from "./pages/CryptoTrading";
+import PaperTrading from "./pages/PaperTrading";
+import Alerts from "./pages/Alerts";
 
 function Router() {
   return (
@@ -58,6 +61,9 @@ function Router() {
       <Route path="/admin/subscriptions" component={AdminSubscriptions} />
       <Route path="/admin/analytics" component={AdminAnalytics} />
       <Route path="/verify-email" component={VerifyEmail} />
+      <Route path="/crypto" component={CryptoTrading} />
+      <Route path="/paper-trading" component={PaperTrading} />
+      <Route path="/alerts" component={Alerts} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

@@ -593,16 +593,20 @@ export type InsertWatchlistAlert = typeof watchlistAlerts.$inferInsert;
  */
 export const alertHistory = mysqlTable("alert_history", {
   id: int("id").autoincrement().primaryKey(),
+  uniqueId: varchar("uniqueId", { length: 64 }), // For new alert system
   userId: int("userId").notNull(),
   alertId: int("alertId").notNull(),
+  alertIdStr: varchar("alertIdStr", { length: 64 }), // For new alert system
   symbol: varchar("symbol", { length: 20 }).notNull(),
-  alertType: mysqlEnum("alertType", ["recommendation_change", "confidence_change", "price_target", "bot_status", "analysis_complete"]).notNull(),
+  alertType: mysqlEnum("alertType", ["recommendation_change", "confidence_change", "price_target", "bot_status", "analysis_complete", "price", "regime", "sentiment"]).notNull(),
   // Alert content
-  title: varchar("title", { length: 255 }).notNull(),
+  title: varchar("title", { length: 255 }),
   message: text("message").notNull(),
   // Previous and new values
   previousValue: varchar("previousValue", { length: 100 }),
   newValue: varchar("newValue", { length: 100 }),
+  details: json("details"), // For new alert system
+  isRead: boolean("isRead").default(false).notNull(),
   // Delivery status
   emailSent: boolean("emailSent").default(false).notNull(),
   pushSent: boolean("pushSent").default(false).notNull(),
@@ -1418,3 +1422,189 @@ export const strategyComparisons = mysqlTable("strategy_comparisons", {
 
 export type StrategyComparison = typeof strategyComparisons.$inferSelect;
 export type InsertStrategyComparison = typeof strategyComparisons.$inferInsert;
+
+
+/**
+ * Paper Trading Accounts
+ * Virtual trading accounts for practice
+ */
+export const paperTradingAccounts = mysqlTable("paper_trading_accounts", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  initialBalance: decimal("initialBalance", { precision: 18, scale: 2 }).notNull(),
+  currentBalance: decimal("currentBalance", { precision: 18, scale: 2 }).notNull(),
+  totalEquity: decimal("totalEquity", { precision: 18, scale: 2 }).notNull(),
+  totalPnL: decimal("totalPnL", { precision: 18, scale: 2 }).default("0").notNull(),
+  totalPnLPercent: decimal("totalPnLPercent", { precision: 10, scale: 4 }).default("0").notNull(),
+  totalTrades: int("totalTrades").default(0).notNull(),
+  winningTrades: int("winningTrades").default(0).notNull(),
+  losingTrades: int("losingTrades").default(0).notNull(),
+  winRate: decimal("winRate", { precision: 10, scale: 4 }).default("0").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PaperTradingAccount = typeof paperTradingAccounts.$inferSelect;
+export type InsertPaperTradingAccount = typeof paperTradingAccounts.$inferInsert;
+
+/**
+ * Paper Trading Orders
+ * Orders placed in paper trading accounts
+ */
+export const paperTradingOrders = mysqlTable("paper_trading_orders", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  accountId: varchar("accountId", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  assetType: mysqlEnum("assetType", ["stock", "crypto"]).notNull(),
+  side: mysqlEnum("side", ["buy", "sell"]).notNull(),
+  type: mysqlEnum("type", ["market", "limit", "stop_loss", "take_profit", "stop_limit"]).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
+  price: decimal("price", { precision: 18, scale: 8 }),
+  stopPrice: decimal("stopPrice", { precision: 18, scale: 8 }),
+  takeProfitPrice: decimal("takeProfitPrice", { precision: 18, scale: 8 }),
+  stopLossPrice: decimal("stopLossPrice", { precision: 18, scale: 8 }),
+  status: mysqlEnum("status", ["pending", "filled", "partially_filled", "cancelled", "expired", "rejected"]).default("pending").notNull(),
+  filledQuantity: decimal("filledQuantity", { precision: 18, scale: 8 }).default("0").notNull(),
+  filledPrice: decimal("filledPrice", { precision: 18, scale: 8 }),
+  commission: decimal("commission", { precision: 18, scale: 8 }).default("0").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  expiresAt: timestamp("expiresAt"),
+});
+
+export type PaperTradingOrder = typeof paperTradingOrders.$inferSelect;
+export type InsertPaperTradingOrder = typeof paperTradingOrders.$inferInsert;
+
+/**
+ * Paper Trading Positions
+ * Open positions in paper trading accounts
+ */
+export const paperTradingPositions = mysqlTable("paper_trading_positions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  accountId: varchar("accountId", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  assetType: mysqlEnum("assetType", ["stock", "crypto"]).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
+  averagePrice: decimal("averagePrice", { precision: 18, scale: 8 }).notNull(),
+  currentPrice: decimal("currentPrice", { precision: 18, scale: 8 }).notNull(),
+  marketValue: decimal("marketValue", { precision: 18, scale: 2 }).notNull(),
+  unrealizedPnL: decimal("unrealizedPnL", { precision: 18, scale: 2 }).notNull(),
+  unrealizedPnLPercent: decimal("unrealizedPnLPercent", { precision: 10, scale: 4 }).notNull(),
+  realizedPnL: decimal("realizedPnL", { precision: 18, scale: 2 }).default("0").notNull(),
+  openedAt: timestamp("openedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PaperTradingPosition = typeof paperTradingPositions.$inferSelect;
+export type InsertPaperTradingPosition = typeof paperTradingPositions.$inferInsert;
+
+/**
+ * Paper Trading History
+ * Trade execution history for paper trading
+ */
+export const paperTradingHistory = mysqlTable("paper_trading_history", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  accountId: varchar("accountId", { length: 64 }).notNull(),
+  orderId: varchar("orderId", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  assetType: mysqlEnum("assetType", ["stock", "crypto"]).notNull(),
+  side: mysqlEnum("side", ["buy", "sell"]).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
+  price: decimal("price", { precision: 18, scale: 8 }).notNull(),
+  commission: decimal("commission", { precision: 18, scale: 8 }).notNull(),
+  pnl: decimal("pnl", { precision: 18, scale: 2 }).default("0").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PaperTradingHistoryRecord = typeof paperTradingHistory.$inferSelect;
+export type InsertPaperTradingHistoryRecord = typeof paperTradingHistory.$inferInsert;
+
+/**
+ * Price Alerts
+ * User-configured price alerts
+ */
+export const priceAlerts = mysqlTable("price_alerts", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  assetType: mysqlEnum("assetType", ["stock", "crypto"]).notNull(),
+  alertType: mysqlEnum("alertType", ["price_above", "price_below", "percent_change", "volume_spike"]).notNull(),
+  targetValue: decimal("targetValue", { precision: 18, scale: 8 }).notNull(),
+  currentValue: decimal("currentValue", { precision: 18, scale: 8 }),
+  message: text("message"),
+  isActive: boolean("isActive").default(true).notNull(),
+  isTriggered: boolean("isTriggered").default(false).notNull(),
+  triggeredAt: timestamp("triggeredAt"),
+  notifyEmail: boolean("notifyEmail").default(true).notNull(),
+  notifyPush: boolean("notifyPush").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PriceAlert = typeof priceAlerts.$inferSelect;
+export type InsertPriceAlert = typeof priceAlerts.$inferInsert;
+
+/**
+ * Regime Change Alerts
+ * Alerts for market regime changes
+ */
+export const regimeAlerts = mysqlTable("regime_alerts", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  fromRegime: mysqlEnum("fromRegime", ["bull", "bear", "sideways", "volatile"]),
+  toRegime: mysqlEnum("toRegime", ["bull", "bear", "sideways", "volatile"]).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  isTriggered: boolean("isTriggered").default(false).notNull(),
+  triggeredAt: timestamp("triggeredAt"),
+  notifyEmail: boolean("notifyEmail").default(true).notNull(),
+  notifyPush: boolean("notifyPush").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RegimeAlert = typeof regimeAlerts.$inferSelect;
+export type InsertRegimeAlert = typeof regimeAlerts.$inferInsert;
+
+/**
+ * Sentiment Alerts
+ * Alerts for sentiment shifts
+ */
+export const sentimentAlerts = mysqlTable("sentiment_alerts", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  alertType: mysqlEnum("alertType", ["sentiment_bullish", "sentiment_bearish", "fear_greed_extreme", "sentiment_shift"]).notNull(),
+  threshold: decimal("threshold", { precision: 10, scale: 4 }),
+  isActive: boolean("isActive").default(true).notNull(),
+  isTriggered: boolean("isTriggered").default(false).notNull(),
+  triggeredAt: timestamp("triggeredAt"),
+  notifyEmail: boolean("notifyEmail").default(true).notNull(),
+  notifyPush: boolean("notifyPush").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SentimentAlert = typeof sentimentAlerts.$inferSelect;
+export type InsertSentimentAlert = typeof sentimentAlerts.$inferInsert;
+
+// Alert History for new alert types is handled by the existing alertHistory table
+
+/**
+ * Crypto Watchlist
+ * User's cryptocurrency watchlist
+ */
+export const cryptoWatchlist = mysqlTable("crypto_watchlist", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  notes: text("notes"),
+  targetBuyPrice: decimal("targetBuyPrice", { precision: 18, scale: 8 }),
+  targetSellPrice: decimal("targetSellPrice", { precision: 18, scale: 8 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CryptoWatchlistItem = typeof cryptoWatchlist.$inferSelect;
+export type InsertCryptoWatchlistItem = typeof cryptoWatchlist.$inferInsert;
