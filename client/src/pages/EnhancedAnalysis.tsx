@@ -2,6 +2,9 @@ import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { BacktestingValidation } from "@/components/BacktestingValidation";
 import { StrategyComparison } from "@/components/StrategyComparison";
+import { MonteCarloSimulation } from "@/components/MonteCarloSimulation";
+import { WalkForwardOptimization } from "@/components/WalkForwardOptimization";
+import { PortfolioBacktesting } from "@/components/PortfolioBacktesting";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -466,12 +469,15 @@ export default function EnhancedAnalysis() {
             <Card className="bg-card border-border">
               <CardContent className="pt-6">
                 <Tabs defaultValue="agents" className="w-full">
-                  <TabsList className="grid w-full grid-cols-5 mb-6">
+                  <TabsList className="grid w-full grid-cols-8 mb-6">
                     <TabsTrigger value="agents">AI Agents</TabsTrigger>
                     <TabsTrigger value="technical">Technical</TabsTrigger>
                     <TabsTrigger value="research">Research</TabsTrigger>
                     <TabsTrigger value="backtest">Backtest</TabsTrigger>
                     <TabsTrigger value="compare">Compare</TabsTrigger>
+                    <TabsTrigger value="montecarlo">Monte Carlo</TabsTrigger>
+                    <TabsTrigger value="walkforward">Walk-Forward</TabsTrigger>
+                    <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
                   </TabsList>
 
                   {/* Agents Tab */}
@@ -751,6 +757,21 @@ export default function EnhancedAnalysis() {
                   {/* Compare Tab */}
                   <TabsContent value="compare">
                     <StrategyComparison />
+                  </TabsContent>
+
+                  {/* Monte Carlo Tab */}
+                  <TabsContent value="montecarlo">
+                    <MonteCarloSimulation />
+                  </TabsContent>
+
+                  {/* Walk-Forward Tab */}
+                  <TabsContent value="walkforward">
+                    <WalkForwardOptimization />
+                  </TabsContent>
+
+                  {/* Portfolio Tab */}
+                  <TabsContent value="portfolio">
+                    <PortfolioBacktesting />
                   </TabsContent>
                 </Tabs>
               </CardContent>

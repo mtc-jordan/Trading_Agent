@@ -24,6 +24,9 @@ import {
 import { runBacktest, BacktestConfig } from "./services/backtesting";
 import { runBacktestValidation, getUserBacktests, getBacktestById, BacktestConfig as ValidationConfig } from "./services/backtestingValidation";
 import { RLTradingAgent } from "./services/rlAgent";
+import { runMonteCarloSimulation, runQuickSimulation, MonteCarloConfig } from "./services/monteCarloSimulation";
+import { runWalkForwardOptimization, runQuickWalkForward, WalkForwardConfig } from "./services/walkForwardOptimization";
+import { runPortfolioBacktest, runQuickPortfolioAnalysis, PortfolioConfig } from "./services/portfolioBacktesting";
 import { callDataApi } from "./_core/dataApi";
 import { getStockQuote, searchStocks, getCachedPrice, getAllCachedPrices, fetchStockPrice } from "./services/marketData";
 import { getUserEmailPreferences, updateUserEmailPreferences, testSendGridApiKey } from "./services/twilioEmail";
@@ -2434,6 +2437,172 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
         return db.getStrategyComparisonById(input.id, ctx.user.id);
+      }),
+  }),
+
+  // ==================== MONTE CARLO SIMULATION ====================
+  monteCarlo: router({
+    // Run full Monte Carlo simulation
+    run: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(10),
+        initialCapital: z.number().min(1000).max(10000000),
+        numSimulations: z.number().min(100).max(10000).default(1000),
+        timeHorizonDays: z.number().min(5).max(504).default(252),
+        confidenceLevels: z.array(z.number().min(0.5).max(0.99)).default([0.95, 0.99]),
+        strategyType: z.enum(['buy_hold', 'momentum', 'mean_reversion', 'enhanced']).default('buy_hold'),
+        riskFreeRate: z.number().min(0).max(0.2).default(0.05),
+      }))
+      .mutation(async ({ input }) => {
+        const config: MonteCarloConfig = {
+          symbol: input.symbol.toUpperCase(),
+          initialCapital: input.initialCapital,
+          numSimulations: input.numSimulations,
+          timeHorizonDays: input.timeHorizonDays,
+          confidenceLevels: input.confidenceLevels,
+          strategyType: input.strategyType,
+          riskFreeRate: input.riskFreeRate,
+        };
+        
+        return runMonteCarloSimulation(config);
+      }),
+
+    // Quick simulation for preview
+    quick: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(10),
+        initialCapital: z.number().min(1000).max(10000000).default(100000),
+        timeHorizonDays: z.number().min(5).max(504).default(252),
+      }))
+      .query(async ({ input }) => {
+        return runQuickSimulation(
+          input.symbol.toUpperCase(),
+          input.initialCapital,
+          input.timeHorizonDays
+        );
+      }),
+  }),
+
+  // ==================== WALK-FORWARD OPTIMIZATION ====================
+  walkForward: router({
+    // Run full walk-forward optimization
+    run: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(10),
+        totalPeriodDays: z.number().min(126).max(2520).default(504),
+        trainingWindowDays: z.number().min(21).max(504).default(126),
+        testingWindowDays: z.number().min(5).max(126).default(63),
+        stepSizeDays: z.number().min(5).max(126).default(63),
+        optimizationType: z.enum(['anchored', 'rolling']).default('rolling'),
+        strategyType: z.enum(['rl', 'momentum', 'mean_reversion', 'enhanced']).default('enhanced'),
+        initialCapital: z.number().min(1000).max(10000000).default(100000),
+      }))
+      .mutation(async ({ input }) => {
+        const config: WalkForwardConfig = {
+          symbol: input.symbol.toUpperCase(),
+          totalPeriodDays: input.totalPeriodDays,
+          trainingWindowDays: input.trainingWindowDays,
+          testingWindowDays: input.testingWindowDays,
+          stepSizeDays: input.stepSizeDays,
+          optimizationType: input.optimizationType,
+          strategyType: input.strategyType,
+          initialCapital: input.initialCapital,
+        };
+        
+        return runWalkForwardOptimization(config);
+      }),
+
+    // Quick walk-forward analysis
+    quick: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(10),
+        strategyType: z.enum(['rl', 'momentum', 'mean_reversion', 'enhanced']).default('enhanced'),
+      }))
+      .query(async ({ input }) => {
+        return runQuickWalkForward(
+          input.symbol.toUpperCase(),
+          input.strategyType
+        );
+      }),
+  }),
+
+  // ==================== PORTFOLIO BACKTESTING ====================
+  portfolioBacktest: router({
+    // Run full portfolio backtest
+    backtest: protectedProcedure
+      .input(z.object({
+        assets: z.array(z.object({
+          symbol: z.string().min(1).max(10),
+          weight: z.number().min(0).max(1),
+          name: z.string().optional(),
+        })).min(2).max(20),
+        initialCapital: z.number().min(1000).max(10000000).default(100000),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        rebalanceFrequency: z.enum(['daily', 'weekly', 'monthly', 'quarterly', 'none']).default('monthly'),
+        riskFreeRate: z.number().min(0).max(0.2).default(0.05),
+        benchmarkSymbol: z.string().default('SPY'),
+      }))
+      .mutation(async ({ input }) => {
+        // Normalize weights
+        const totalWeight = input.assets.reduce((sum, a) => sum + a.weight, 0);
+        const normalizedAssets = input.assets.map(a => ({
+          ...a,
+          symbol: a.symbol.toUpperCase(),
+          weight: a.weight / totalWeight,
+        }));
+
+        const config: PortfolioConfig = {
+          assets: normalizedAssets,
+          initialCapital: input.initialCapital,
+          startDate: input.startDate ? new Date(input.startDate) : new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000),
+          endDate: input.endDate ? new Date(input.endDate) : new Date(),
+          rebalanceFrequency: input.rebalanceFrequency,
+          riskFreeRate: input.riskFreeRate,
+          benchmarkSymbol: input.benchmarkSymbol.toUpperCase(),
+        };
+        
+        return runPortfolioBacktest(config);
+      }),
+
+    // Quick portfolio analysis
+    quickAnalysis: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string().min(1).max(10)).min(2).max(20),
+        weights: z.array(z.number().min(0).max(1)).optional(),
+      }))
+      .query(async ({ input }) => {
+        const weights = input.weights || input.symbols.map(() => 1 / input.symbols.length);
+        return runQuickPortfolioAnalysis(
+          input.symbols.map(s => s.toUpperCase()),
+          weights
+        );
+      }),
+
+    // Get efficient frontier for assets
+    efficientFrontier: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string().min(1).max(10)).min(2).max(10),
+      }))
+      .query(async ({ input }) => {
+        const assets = input.symbols.map(symbol => ({
+          symbol: symbol.toUpperCase(),
+          weight: 1 / input.symbols.length,
+        }));
+
+        const result = await runPortfolioBacktest({
+          assets,
+          initialCapital: 100000,
+          startDate: new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000),
+          endDate: new Date(),
+          rebalanceFrequency: 'monthly',
+        });
+
+        return {
+          frontier: result.efficientFrontier,
+          correlationMatrix: result.correlationMatrix,
+          diversificationMetrics: result.diversificationMetrics,
+        };
       }),
   }),
 });

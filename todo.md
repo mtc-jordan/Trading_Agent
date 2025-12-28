@@ -489,3 +489,36 @@
 - [x] Add database tables for backtest results, RL models, and strategy comparisons
 - [x] Write 34 unit tests for new features (315 tests total passing)
 - [x] Push to GitHub
+
+
+## Phase 37: Monte Carlo, Walk-Forward Optimization & Portfolio Backtesting
+### Monte Carlo Simulation
+- [x] Create Monte Carlo simulation service with random market scenarios
+- [x] Implement bootstrap resampling of historical returns
+- [x] Calculate confidence intervals for expected returns (95%, 99%)
+- [x] Generate probability distributions for outcomes
+- [x] Create Monte Carlo UI component with distribution charts
+- [x] Add VaR (Value at Risk) and CVaR calculations
+
+### Walk-Forward Optimization
+- [x] Create walk-forward optimization service
+- [x] Implement rolling window training for RL agent
+- [x] Add out-of-sample testing for each window
+- [x] Calculate stability metrics across windows
+- [x] Create Walk-Forward UI component with performance timeline
+- [x] Add overfitting detection metrics
+
+### Portfolio-Level Backtesting
+- [x] Create portfolio backtesting service for multi-asset testing
+- [x] Implement correlation matrix calculation
+- [x] Add diversification ratio and benefit metrics
+- [x] Calculate portfolio-level Sharpe, Sortino, max drawdown
+- [x] Implement efficient frontier visualization
+- [x] Create Portfolio Backtesting UI component
+- [x] Add asset allocation optimization
+
+### Integration
+- [x] Add tRPC endpoints for all three features
+- [x] Integrate components into Enhanced Analysis page
+- [x] Write unit tests for new features (341 tests passing)
+- [x] Push to GitHub
