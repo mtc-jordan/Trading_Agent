@@ -6,6 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "./db";
 import { runAgentConsensus, getAvailableAgents } from "./services/aiAgents";
+import { runEnhancedAnalysis, EnhancedAnalysisResult } from "./services/enhancedAnalysis";
 import { 
   encryptApiKey, 
   decryptApiKey, 
@@ -545,6 +546,70 @@ export const appRouter = router({
     getUniqueSymbols: protectedProcedure.query(async ({ ctx }) => {
       return db.getUniqueSymbols(ctx.user.id);
     }),
+
+    // Enhanced Analysis with research-backed strategies
+    enhancedAnalysis: protectedProcedure
+      .input(z.object({ 
+        symbol: z.string(),
+        accountBalance: z.number().optional().default(10000)
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Check tier access - enhanced analysis requires at least starter tier
+        if (!checkTierAccess(ctx.user.subscriptionTier, "starter")) {
+          throw new TRPCError({ 
+            code: "FORBIDDEN", 
+            message: "Enhanced analysis requires Starter tier or higher" 
+          });
+        }
+        
+        const result = await runEnhancedAnalysis(input.symbol, input.accountBalance);
+        
+        // Save enhanced analysis to database
+        await db.createAgentAnalysis({
+          userId: ctx.user.id,
+          symbol: input.symbol,
+          technicalScore: (result.agents.find(a => a.agentType === "Technical Analysis")?.confidence ?? 0.5).toString(),
+          fundamentalScore: (result.agents.find(a => a.agentType === "Fundamental Analysis")?.confidence ?? 0.5).toString(),
+          sentimentScore: (result.agents.find(a => a.agentType === "Sentiment Analysis")?.confidence ?? 0.5).toString(),
+          riskScore: (result.agents.find(a => a.agentType === "Risk Management")?.confidence ?? 0.5).toString(),
+          quantScore: (result.agents.find(a => a.agentType === "Quantitative Analysis")?.confidence ?? 0.5).toString(),
+          consensusScore: result.overallScore.toString(),
+          consensusAction: result.consensusRecommendation,
+          confidence: result.consensusConfidence.toString(),
+          analysisDetails: result as any,
+        });
+        
+        return result;
+      }),
+
+    // Get market regime for a symbol
+    getMarketRegime: protectedProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const result = await runEnhancedAnalysis(input.symbol);
+        return result.marketRegime;
+      }),
+
+    // Calculate position sizing
+    calculatePositionSize: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        accountBalance: z.number(),
+        winRate: z.number().min(0).max(1).optional().default(0.55),
+        avgWinPercent: z.number().optional().default(2),
+        avgLossPercent: z.number().optional().default(1),
+        maxRiskPercent: z.number().min(0.01).max(0.1).optional().default(0.02)
+      }))
+      .query(async ({ ctx, input }) => {
+        const { calculateKellyPosition } = await import("./services/enhancedAnalysis");
+        return calculateKellyPosition(
+          input.winRate,
+          input.avgWinPercent,
+          input.avgLossPercent,
+          input.accountBalance,
+          input.maxRiskPercent
+        );
+      }),
   }),
 
   // ==================== BACKTEST ROUTES ====================

@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Analysis from "./pages/Analysis";
+import EnhancedAnalysis from "./pages/EnhancedAnalysis";
 import Bots from "./pages/Bots";
 import Backtest from "./pages/Backtest";
 import Portfolio from "./pages/Portfolio";
@@ -36,6 +37,7 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/analysis" component={Analysis} />
+      <Route path="/enhanced-analysis" component={EnhancedAnalysis} />
       <Route path="/bots" component={Bots} />
       <Route path="/backtest" component={Backtest} />
       <Route path="/portfolio" component={Portfolio} />
