@@ -21,6 +21,7 @@ import Community from "./pages/Community";
 import Profile from "./pages/Profile";
 import BotSchedules from "./pages/BotSchedules";
 import BotDetail from "./pages/BotDetail";
+import AdminJobs from "./pages/AdminJobs";
 
 function Router() {
   return (
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/profile" component={Profile} />
       <Route path="/schedules" component={BotSchedules} />
       <Route path="/bots/:id" component={BotDetail} />
+      <Route path="/admin/jobs" component={AdminJobs} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

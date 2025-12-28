@@ -7,12 +7,12 @@ import { usePortfolioValue, formatCurrency, formatPercent } from "@/hooks/usePor
 import { cn } from "@/lib/utils";
 
 interface PortfolioValueCardProps {
-  accountId: number | null;
+  accountId?: number | null;
   className?: string;
   compact?: boolean;
 }
 
-export function PortfolioValueCard({ accountId, className, compact = false }: PortfolioValueCardProps) {
+export function PortfolioValueCard({ accountId = null, className, compact = false }: PortfolioValueCardProps) {
   const {
     portfolioValue,
     isLoading,

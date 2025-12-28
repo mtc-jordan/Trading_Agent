@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { PriceTicker } from "@/components/LivePriceDisplay";
+import { PortfolioValueCard } from "@/components/PortfolioValueCard";
 import { 
   ArrowDown, 
   ArrowUp, 
@@ -127,6 +128,9 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Portfolio Value Card - Real-time */}
+        <PortfolioValueCard />
 
         {/* Live Price Ticker */}
         <Card className="bg-card border-border">

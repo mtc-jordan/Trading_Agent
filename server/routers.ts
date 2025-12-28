@@ -23,6 +23,7 @@ import {
 import { runBacktest, BacktestConfig } from "./services/backtesting";
 import { callDataApi } from "./_core/dataApi";
 import { getStockQuote, searchStocks, getCachedPrice, getAllCachedPrices, fetchStockPrice } from "./services/marketData";
+import { getUserEmailPreferences, updateUserEmailPreferences, testSendGridApiKey } from "./services/twilioEmail";
 import { createCheckoutSession, createCustomerPortalSession } from "./stripe/checkout";
 import { SUBSCRIPTION_TIERS, SubscriptionTier } from "./stripe/products";
 
@@ -62,6 +63,49 @@ export const appRouter = router({
     getTierLimits: protectedProcedure.query(async ({ ctx }) => {
       return db.getTierLimits(ctx.user.subscriptionTier as any);
     }),
+
+    // Email Preferences
+    getEmailPreferences: protectedProcedure.query(async ({ ctx }) => {
+      const prefs = await getUserEmailPreferences(ctx.user.id);
+      return prefs || {
+        userId: ctx.user.id,
+        botExecutionComplete: true,
+        botExecutionError: true,
+        priceTargetAlert: true,
+        recommendationChange: true,
+        weeklyReport: true,
+        monthlyReport: true,
+        marketingEmails: false,
+        digestFrequency: "immediate" as const,
+        timezone: "UTC",
+        isUnsubscribed: false,
+      };
+    }),
+
+    updateEmailPreferences: protectedProcedure
+      .input(z.object({
+        botExecutionComplete: z.boolean().optional(),
+        botExecutionError: z.boolean().optional(),
+        priceTargetAlert: z.boolean().optional(),
+        recommendationChange: z.boolean().optional(),
+        weeklyReport: z.boolean().optional(),
+        monthlyReport: z.boolean().optional(),
+        marketingEmails: z.boolean().optional(),
+        digestFrequency: z.enum(["immediate", "hourly", "daily", "weekly"]).optional(),
+        quietHoursStart: z.string().optional(),
+        quietHoursEnd: z.string().optional(),
+        timezone: z.string().optional(),
+        isUnsubscribed: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return updateUserEmailPreferences(ctx.user.id, input);
+      }),
+
+    testEmailConnection: protectedProcedure
+      .input(z.object({ apiKey: z.string() }))
+      .mutation(async ({ input }) => {
+        return testSendGridApiKey(input.apiKey);
+      }),
   }),
 
   // ==================== TRADING ACCOUNT ROUTES ====================

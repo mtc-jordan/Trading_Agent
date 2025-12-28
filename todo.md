@@ -344,3 +344,35 @@
 - [ ] Optimize sidebar for mobile (collapsible) - already supported
 - [ ] Optimize remaining pages for mobile (future)
 - [ ] Test all pages on mobile viewports (future)
+
+## Phase 29: Email Preferences UI & Twilio Integration
+- [x] Set up Twilio SendGrid integration for email delivery
+- [x] Create email preferences API routes (get, update)
+- [x] Build email preferences UI in Settings page
+- [x] Add notification type toggles (bot execution, price alerts, recommendations)
+- [x] Add delivery frequency selector (instant, daily digest, weekly digest)
+- [x] Add quiet hours configuration
+- [x] Add timezone selection
+- [x] Add marketing email preferences
+- [x] Add unsubscribe all functionality
+- [ ] Add email verification flow (future)
+- [ ] Test email delivery with Twilio (future)
+
+## Phase 30: Dashboard Portfolio Card Integration
+- [x] Import PortfolioValueCard into Dashboard
+- [x] Position card in Dashboard layout after stats grid
+- [x] Make accountId prop optional for aggregate view
+- [x] Connect to real-time WebSocket updates
+- [x] Add loading and error states
+
+## Phase 31: Job Monitoring Dashboard (Admin)
+- [x] Create job monitoring page for admins (/admin/jobs)
+- [x] Display scheduled jobs list with status and type filtering
+- [x] Show job execution history with logs
+- [x] Add job failure alerts and retry functionality
+- [x] Display job statistics (total, active, running, failed, success rate)
+- [x] Add manual job trigger capability (Run Now button)
+- [x] Add job pause/resume controls
+- [x] Create Email Queue tab with delivery stats
+- [x] Add Admin menu section in sidebar for admin users
+- [x] Restrict access to admin role only

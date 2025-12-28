@@ -35,7 +35,11 @@ import {
   Clock,
   Coins,
   ArrowUpDown,
-  Info
+  Info,
+  Mail,
+  Bell,
+  BellOff,
+  Globe
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -332,6 +336,10 @@ export default function Settings() {
             <TabsTrigger value="preferences" className="gap-2">
               <Zap className="h-4 w-4" />
               Preferences
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="gap-2">
+              <Bell className="h-4 w-4" />
+              Notifications
             </TabsTrigger>
           </TabsList>
 
@@ -1054,8 +1062,408 @@ export default function Settings() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Email Notifications Tab */}
+          <TabsContent value="notifications" className="space-y-6">
+            <EmailPreferencesSection />
+          </TabsContent>
         </Tabs>
       </main>
     </div>
+  );
+}
+
+// Email Preferences Section Component
+function EmailPreferencesSection() {
+  const { data: emailPrefs, isLoading, refetch } = trpc.user.getEmailPreferences.useQuery();
+  const updatePrefs = trpc.user.updateEmailPreferences.useMutation({
+    onSuccess: () => {
+      toast.success("Email preferences updated");
+      refetch();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const [localPrefs, setLocalPrefs] = useState<{
+    botExecutionComplete: boolean;
+    botExecutionError: boolean;
+    priceTargetAlert: boolean;
+    recommendationChange: boolean;
+    weeklyReport: boolean;
+    monthlyReport: boolean;
+    marketingEmails: boolean;
+    digestFrequency: "immediate" | "hourly" | "daily" | "weekly";
+    quietHoursStart: string;
+    quietHoursEnd: string;
+    timezone: string;
+    isUnsubscribed: boolean;
+  }>({
+    botExecutionComplete: true,
+    botExecutionError: true,
+    priceTargetAlert: true,
+    recommendationChange: true,
+    weeklyReport: true,
+    monthlyReport: true,
+    marketingEmails: false,
+    digestFrequency: "immediate",
+    quietHoursStart: "",
+    quietHoursEnd: "",
+    timezone: "UTC",
+    isUnsubscribed: false,
+  });
+
+  useEffect(() => {
+    if (emailPrefs) {
+      setLocalPrefs({
+        botExecutionComplete: emailPrefs.botExecutionComplete,
+        botExecutionError: emailPrefs.botExecutionError,
+        priceTargetAlert: emailPrefs.priceTargetAlert,
+        recommendationChange: emailPrefs.recommendationChange,
+        weeklyReport: emailPrefs.weeklyReport,
+        monthlyReport: emailPrefs.monthlyReport,
+        marketingEmails: emailPrefs.marketingEmails,
+        digestFrequency: emailPrefs.digestFrequency,
+        quietHoursStart: emailPrefs.quietHoursStart || "",
+        quietHoursEnd: emailPrefs.quietHoursEnd || "",
+        timezone: emailPrefs.timezone,
+        isUnsubscribed: emailPrefs.isUnsubscribed,
+      });
+    }
+  }, [emailPrefs]);
+
+  const handleToggle = (key: keyof typeof localPrefs, value: boolean) => {
+    setLocalPrefs(prev => ({ ...prev, [key]: value }));
+    updatePrefs.mutate({ [key]: value });
+  };
+
+  const handleSelectChange = (key: keyof typeof localPrefs, value: string) => {
+    setLocalPrefs(prev => ({ ...prev, [key]: value }));
+    updatePrefs.mutate({ [key]: value });
+  };
+
+  const timezones = [
+    "UTC",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "Europe/London",
+    "Europe/Paris",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Australia/Sydney",
+  ];
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      {/* Master Unsubscribe */}
+      {localPrefs.isUnsubscribed && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <BellOff className="h-5 w-5 text-yellow-500" />
+                <div>
+                  <p className="font-medium text-yellow-500">All emails are currently disabled</p>
+                  <p className="text-sm text-muted-foreground">Re-enable to receive notifications</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => handleToggle("isUnsubscribed", false)}
+              >
+                Re-enable Emails
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Trading Alerts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-primary" />
+            Trading Alerts
+          </CardTitle>
+          <CardDescription>
+            Get notified about your bot executions and trading activity
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base">Bot Execution Complete</Label>
+              <p className="text-sm text-muted-foreground">
+                Notify when a scheduled bot finishes running
+              </p>
+            </div>
+            <Switch
+              checked={localPrefs.botExecutionComplete}
+              onCheckedChange={(checked) => handleToggle("botExecutionComplete", checked)}
+              disabled={localPrefs.isUnsubscribed}
+            />
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base">Bot Errors</Label>
+              <p className="text-sm text-muted-foreground">
+                Notify when a bot encounters an error
+              </p>
+            </div>
+            <Switch
+              checked={localPrefs.botExecutionError}
+              onCheckedChange={(checked) => handleToggle("botExecutionError", checked)}
+              disabled={localPrefs.isUnsubscribed}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Price Alerts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Price & Recommendation Alerts
+          </CardTitle>
+          <CardDescription>
+            Get notified about price targets and AI recommendation changes
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base">Price Target Alerts</Label>
+              <p className="text-sm text-muted-foreground">
+                Notify when watchlist symbols hit your price targets
+              </p>
+            </div>
+            <Switch
+              checked={localPrefs.priceTargetAlert}
+              onCheckedChange={(checked) => handleToggle("priceTargetAlert", checked)}
+              disabled={localPrefs.isUnsubscribed}
+            />
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base">Recommendation Changes</Label>
+              <p className="text-sm text-muted-foreground">
+                Notify when AI recommendations change for watched symbols
+              </p>
+            </div>
+            <Switch
+              checked={localPrefs.recommendationChange}
+              onCheckedChange={(checked) => handleToggle("recommendationChange", checked)}
+              disabled={localPrefs.isUnsubscribed}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Reports */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-primary" />
+            Performance Reports
+          </CardTitle>
+          <CardDescription>
+            Receive periodic summaries of your trading performance
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base">Weekly Reports</Label>
+              <p className="text-sm text-muted-foreground">
+                Receive a weekly summary every Monday
+              </p>
+            </div>
+            <Switch
+              checked={localPrefs.weeklyReport}
+              onCheckedChange={(checked) => handleToggle("weeklyReport", checked)}
+              disabled={localPrefs.isUnsubscribed}
+            />
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base">Monthly Reports</Label>
+              <p className="text-sm text-muted-foreground">
+                Receive a monthly summary on the 1st of each month
+              </p>
+            </div>
+            <Switch
+              checked={localPrefs.monthlyReport}
+              onCheckedChange={(checked) => handleToggle("monthlyReport", checked)}
+              disabled={localPrefs.isUnsubscribed}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Delivery Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-primary" />
+            Delivery Settings
+          </CardTitle>
+          <CardDescription>
+            Configure how and when you receive email notifications
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <Label>Delivery Frequency</Label>
+              <Select
+                value={localPrefs.digestFrequency}
+                onValueChange={(v) => handleSelectChange("digestFrequency", v)}
+                disabled={localPrefs.isUnsubscribed}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="immediate">Immediate</SelectItem>
+                  <SelectItem value="hourly">Hourly Digest</SelectItem>
+                  <SelectItem value="daily">Daily Digest</SelectItem>
+                  <SelectItem value="weekly">Weekly Digest</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {localPrefs.digestFrequency === "immediate" 
+                  ? "Receive emails as events occur"
+                  : `Receive a ${localPrefs.digestFrequency} summary of all notifications`}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                Timezone
+              </Label>
+              <Select
+                value={localPrefs.timezone}
+                onValueChange={(v) => handleSelectChange("timezone", v)}
+                disabled={localPrefs.isUnsubscribed}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {timezones.map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz.replace("_", " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used for scheduling digest emails and quiet hours
+              </p>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-4">
+            <Label>Quiet Hours (Do Not Disturb)</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Start Time</Label>
+                <Input
+                  type="time"
+                  value={localPrefs.quietHoursStart}
+                  onChange={(e) => {
+                    setLocalPrefs(prev => ({ ...prev, quietHoursStart: e.target.value }));
+                    updatePrefs.mutate({ quietHoursStart: e.target.value });
+                  }}
+                  disabled={localPrefs.isUnsubscribed}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">End Time</Label>
+                <Input
+                  type="time"
+                  value={localPrefs.quietHoursEnd}
+                  onChange={(e) => {
+                    setLocalPrefs(prev => ({ ...prev, quietHoursEnd: e.target.value }));
+                    updatePrefs.mutate({ quietHoursEnd: e.target.value });
+                  }}
+                  disabled={localPrefs.isUnsubscribed}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Emails will be held and delivered after quiet hours end
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Marketing */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            Marketing & Updates
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base">Product Updates & Tips</Label>
+              <p className="text-sm text-muted-foreground">
+                Receive news about new features and trading tips
+              </p>
+            </div>
+            <Switch
+              checked={localPrefs.marketingEmails}
+              onCheckedChange={(checked) => handleToggle("marketingEmails", checked)}
+              disabled={localPrefs.isUnsubscribed}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Unsubscribe All */}
+      {!localPrefs.isUnsubscribed && (
+        <Card className="border-destructive/30">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">Unsubscribe from all emails</p>
+                <p className="text-sm text-muted-foreground">
+                  Stop receiving all email notifications from TradoVerse
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                onClick={() => handleToggle("isUnsubscribed", true)}
+              >
+                Unsubscribe All
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </>
   );
 }
