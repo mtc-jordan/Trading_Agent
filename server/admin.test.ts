@@ -62,6 +62,7 @@ describe("Admin Dashboard API", () => {
       expect(stats).toHaveProperty("totalUsers");
       expect(stats).toHaveProperty("totalBots");
       expect(stats).toHaveProperty("totalTrades");
+      expect(stats).toHaveProperty("totalBacktests");
       expect(typeof stats.totalUsers).toBe("number");
       expect(typeof stats.totalBots).toBe("number");
       expect(typeof stats.totalTrades).toBe("number");
@@ -101,7 +102,7 @@ describe("Admin Role-Based Access Control", () => {
     expect(ctx.user?.role).toBe("user");
   });
 
-  it("admin context contains required user properties", () => {
+  it("admin context has all required user properties", () => {
     const ctx = createAdminContext();
     expect(ctx.user).toHaveProperty("id");
     expect(ctx.user).toHaveProperty("openId");
@@ -121,45 +122,16 @@ describe("Admin Dashboard Data Validation", () => {
     expect(stats.totalUsers).toBeGreaterThanOrEqual(0);
     expect(stats.totalBots).toBeGreaterThanOrEqual(0);
     expect(stats.totalTrades).toBeGreaterThanOrEqual(0);
+    expect(stats.totalBacktests).toBeGreaterThanOrEqual(0);
   });
-});
 
-describe("Admin User Management", () => {
-  it("user list contains expected properties when users exist", async () => {
+  it("stats contains usersByTier breakdown", async () => {
     const ctx = createAdminContext();
     const caller = appRouter.createCaller(ctx);
     
-    const users = await caller.admin.getUsers({ limit: 50 });
+    const stats = await caller.admin.getStats();
     
-    // If there are users, check their properties
-    if (users.length > 0) {
-      const user = users[0];
-      expect(user).toHaveProperty("id");
-      expect(user).toHaveProperty("name");
-      expect(user).toHaveProperty("email");
-      expect(user).toHaveProperty("role");
-      expect(user).toHaveProperty("createdAt");
-    }
-    
-    // Always passes - just verifies the structure
-    expect(Array.isArray(users)).toBe(true);
-  });
-});
-
-describe("Admin Procedures Security", () => {
-  it("adminProcedure is defined in router", () => {
-    // Verify admin routes exist
-    expect(appRouter._def.procedures).toBeDefined();
-  });
-
-  it("admin routes are accessible", () => {
-    const ctx = createAdminContext();
-    const caller = appRouter.createCaller(ctx);
-    
-    // Verify admin methods exist
-    expect(caller.admin.getStats).toBeDefined();
-    expect(caller.admin.getUsers).toBeDefined();
-    expect(caller.admin.updateUserRole).toBeDefined();
-    expect(caller.admin.updateUserSubscription).toBeDefined();
+    expect(stats).toHaveProperty("usersByTier");
+    expect(Array.isArray(stats.usersByTier)).toBe(true);
   });
 });

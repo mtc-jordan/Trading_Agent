@@ -1,4 +1,4 @@
-import { eq, and, desc, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -364,6 +364,126 @@ export async function getAgentAnalysisHistory(symbol: string, userId: number, li
     .where(and(eq(agentAnalyses.symbol, symbol), eq(agentAnalyses.userId, userId)))
     .orderBy(desc(agentAnalyses.createdAt))
     .limit(limit);
+}
+
+// Enhanced analysis history with filtering
+export interface AnalysisHistoryFilters {
+  userId: number;
+  symbol?: string;
+  consensusAction?: string;
+  startDate?: Date;
+  endDate?: Date;
+  minConfidence?: number;
+  limit?: number;
+  offset?: number;
+}
+
+export async function getFilteredAnalysisHistory(filters: AnalysisHistoryFilters) {
+  const db = await getDb();
+  if (!db) return { analyses: [], total: 0 };
+  
+  const conditions: ReturnType<typeof eq>[] = [eq(agentAnalyses.userId, filters.userId)];
+  
+  if (filters.symbol) {
+    conditions.push(eq(agentAnalyses.symbol, filters.symbol));
+  }
+  
+  if (filters.consensusAction) {
+    conditions.push(eq(agentAnalyses.consensusAction, filters.consensusAction as any));
+  }
+  
+  if (filters.startDate) {
+    conditions.push(gte(agentAnalyses.createdAt, filters.startDate));
+  }
+  
+  if (filters.endDate) {
+    conditions.push(lte(agentAnalyses.createdAt, filters.endDate));
+  }
+  
+  if (filters.minConfidence !== undefined) {
+    conditions.push(gte(agentAnalyses.confidence, filters.minConfidence.toString()));
+  }
+  
+  const whereClause = conditions.length > 1 ? and(...conditions) : conditions[0];
+  
+  // Get total count
+  const [countResult] = await db.select({ count: sql<number>`count(*)` })
+    .from(agentAnalyses)
+    .where(whereClause);
+  
+  // Get paginated results
+  const analyses = await db.select().from(agentAnalyses)
+    .where(whereClause)
+    .orderBy(desc(agentAnalyses.createdAt))
+    .limit(filters.limit || 20)
+    .offset(filters.offset || 0);
+  
+  return {
+    analyses,
+    total: countResult?.count || 0,
+  };
+}
+
+export async function getAnalysisById(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(agentAnalyses)
+    .where(and(eq(agentAnalyses.id, id), eq(agentAnalyses.userId, userId)))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getAnalysisStats(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const [totalCount] = await db.select({ count: sql<number>`count(*)` })
+    .from(agentAnalyses)
+    .where(eq(agentAnalyses.userId, userId));
+  
+  const actionCounts = await db.select({
+    action: agentAnalyses.consensusAction,
+    count: sql<number>`count(*)`
+  })
+    .from(agentAnalyses)
+    .where(eq(agentAnalyses.userId, userId))
+    .groupBy(agentAnalyses.consensusAction);
+  
+  const symbolCounts = await db.select({
+    symbol: agentAnalyses.symbol,
+    count: sql<number>`count(*)`
+  })
+    .from(agentAnalyses)
+    .where(eq(agentAnalyses.userId, userId))
+    .groupBy(agentAnalyses.symbol)
+    .orderBy(desc(sql`count(*)`));
+  
+  const [avgConfidence] = await db.select({
+    avg: sql<number>`AVG(confidence)`
+  })
+    .from(agentAnalyses)
+    .where(eq(agentAnalyses.userId, userId));
+  
+  return {
+    totalAnalyses: totalCount?.count || 0,
+    byAction: actionCounts,
+    bySymbol: symbolCounts.slice(0, 10), // Top 10 symbols
+    avgConfidence: avgConfidence?.avg || 0,
+  };
+}
+
+export async function getUniqueSymbols(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const result = await db.selectDistinct({ symbol: agentAnalyses.symbol })
+    .from(agentAnalyses)
+    .where(eq(agentAnalyses.userId, userId))
+    .orderBy(agentAnalyses.symbol);
+  
+  return result.map(r => r.symbol);
 }
 
 // ==================== MARKETPLACE OPERATIONS ====================

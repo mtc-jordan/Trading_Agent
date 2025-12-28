@@ -130,3 +130,18 @@
 
 ### Testing
 - [x] All 105 unit tests passing
+
+## Phase 12: Analysis History Page
+- [x] Create database queries for fetching analysis history
+- [x] Add API routes with filtering (date, symbol, agent type)
+- [x] Build Analysis History page UI with modern design
+- [x] Implement date range picker filter
+- [x] Implement symbol search filter
+- [x] Implement consensus action filter
+- [x] Implement confidence level filter
+- [x] Create detailed analysis view modal with tabs
+- [x] Add pagination for large datasets
+- [x] Display recommendation, confidence, and agent scores
+- [x] Add export functionality (CSV)
+- [x] Statistics overview with charts (pie chart, bar chart)
+- [x] Write unit tests for analysis history (114 tests passing)

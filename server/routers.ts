@@ -255,6 +255,49 @@ export const appRouter = router({
     getAvailableAgents: protectedProcedure.query(async ({ ctx }) => {
       return getAvailableAgents(ctx.user.subscriptionTier);
     }),
+
+    // Enhanced analysis history with filtering
+    getFilteredHistory: protectedProcedure
+      .input(z.object({
+        symbol: z.string().optional(),
+        consensusAction: z.enum(["strong_buy", "buy", "hold", "sell", "strong_sell"]).optional(),
+        startDate: z.string().optional(), // ISO date string
+        endDate: z.string().optional(),
+        minConfidence: z.number().min(0).max(1).optional(),
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      }))
+      .query(async ({ ctx, input }) => {
+        const filters: db.AnalysisHistoryFilters = {
+          userId: ctx.user.id,
+          symbol: input.symbol,
+          consensusAction: input.consensusAction,
+          startDate: input.startDate ? new Date(input.startDate) : undefined,
+          endDate: input.endDate ? new Date(input.endDate) : undefined,
+          minConfidence: input.minConfidence,
+          limit: input.limit,
+          offset: input.offset,
+        };
+        return db.getFilteredAnalysisHistory(filters);
+      }),
+
+    getById: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const analysis = await db.getAnalysisById(input.id, ctx.user.id);
+        if (!analysis) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Analysis not found" });
+        }
+        return analysis;
+      }),
+
+    getStats: protectedProcedure.query(async ({ ctx }) => {
+      return db.getAnalysisStats(ctx.user.id);
+    }),
+
+    getUniqueSymbols: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUniqueSymbols(ctx.user.id);
+    }),
   }),
 
   // ==================== BACKTEST ROUTES ====================
