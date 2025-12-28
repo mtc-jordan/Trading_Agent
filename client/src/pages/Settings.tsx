@@ -1076,6 +1076,30 @@ export default function Settings() {
 // Email Preferences Section Component
 function EmailPreferencesSection() {
   const { data: emailPrefs, isLoading, refetch } = trpc.user.getEmailPreferences.useQuery();
+  const { data: verificationStatus, refetch: refetchVerification } = trpc.user.getVerificationStatus.useQuery();
+  const sendVerification = trpc.user.sendVerificationEmail.useMutation({
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success("Verification email sent! Check your inbox.");
+        refetchVerification();
+      } else {
+        toast.error(result.error || "Failed to send verification email");
+      }
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const resendVerification = trpc.user.resendVerification.useMutation({
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success("Verification email resent!");
+        refetchVerification();
+      } else {
+        toast.error(result.error || "Failed to resend verification email");
+      }
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const [verifyEmail, setVerifyEmail] = useState("");
   const updatePrefs = trpc.user.updateEmailPreferences.useMutation({
     onSuccess: () => {
       toast.success("Email preferences updated");
@@ -1168,6 +1192,92 @@ function EmailPreferencesSection() {
 
   return (
     <>
+      {/* Email Verification */}
+      {!verificationStatus?.isVerified && (
+        <Card className="border-blue-500/30 bg-blue-500/5 mb-4">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <Mail className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Verify Your Email</CardTitle>
+                <CardDescription>
+                  Verify your email to enable notifications and unlock all features
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {verificationStatus?.hasPendingVerification ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  A verification email has been sent to <strong>{verificationStatus.email}</strong>.
+                  Please check your inbox and click the verification link.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => resendVerification.mutate()}
+                    disabled={resendVerification.isPending || !verificationStatus.canResend}
+                  >
+                    {resendVerification.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Resend Email
+                  </Button>
+                </div>
+                {!verificationStatus.canResend && (
+                  <p className="text-xs text-yellow-500">Maximum resend attempts reached. Please contact support.</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    placeholder="Enter your email address"
+                    value={verifyEmail}
+                    onChange={(e) => setVerifyEmail(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={() => sendVerification.mutate({ email: verifyEmail })}
+                    disabled={sendVerification.isPending || !verifyEmail}
+                  >
+                    {sendVerification.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Mail className="h-4 w-4 mr-2" />
+                    )}
+                    Send Verification
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {verificationStatus?.isVerified && (
+        <Card className="border-green-500/30 bg-green-500/5 mb-4">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <div>
+                <p className="font-medium text-green-500">Email Verified</p>
+                <p className="text-sm text-muted-foreground">
+                  {verificationStatus.email} • Verified {verificationStatus.verifiedAt ? new Date(verificationStatus.verifiedAt).toLocaleDateString() : ''}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Master Unsubscribe */}
       {localPrefs.isUnsubscribed && (
         <Card className="border-yellow-500/30 bg-yellow-500/5">

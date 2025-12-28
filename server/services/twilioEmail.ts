@@ -385,11 +385,14 @@ export async function getEmailQueueStats(): Promise<{
 }
 
 /**
- * Test SendGrid API key validity
+ * Test SendGrid API key validity and optionally send a test email
  */
-export async function testSendGridApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
+export async function testSendGridApiKey(
+  apiKey: string, 
+  testEmail?: string
+): Promise<{ success: boolean; error?: string }> {
   try {
-    // Use SendGrid's API key validation endpoint
+    // First validate the API key
     const response = await fetch("https://api.sendgrid.com/v3/scopes", {
       method: "GET",
       headers: {
@@ -397,14 +400,48 @@ export async function testSendGridApiKey(apiKey: string): Promise<{ valid: boole
       },
     });
 
-    if (response.ok) {
-      return { valid: true };
-    } else if (response.status === 401) {
-      return { valid: false, error: "Invalid API key" };
-    } else {
-      return { valid: false, error: `API error: ${response.status}` };
+    if (!response.ok) {
+      if (response.status === 401) {
+        return { success: false, error: "Invalid API key" };
+      }
+      return { success: false, error: `API error: ${response.status}` };
     }
+
+    // If test email provided, send a test email
+    if (testEmail) {
+      const emailResponse = await fetch(SENDGRID_API_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: testEmail }] }],
+          from: { email: "noreply@tradoverse.com", name: "TradoVerse" },
+          subject: "TradoVerse - Email Configuration Test",
+          content: [{
+            type: "text/html",
+            value: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #10b981;">Email Configuration Successful!</h2>
+                <p>This is a test email from TradoVerse to verify your SendGrid configuration.</p>
+                <p>If you received this email, your email settings are working correctly.</p>
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+                <p style="color: #6b7280; font-size: 12px;">This is an automated test email from TradoVerse.</p>
+              </div>
+            `
+          }]
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        const errorText = await emailResponse.text();
+        return { success: false, error: `Failed to send test email: ${errorText}` };
+      }
+    }
+
+    return { success: true };
   } catch (error) {
-    return { valid: false, error: error instanceof Error ? error.message : "Connection error" };
+    return { success: false, error: error instanceof Error ? error.message : "Connection error" };
   }
 }

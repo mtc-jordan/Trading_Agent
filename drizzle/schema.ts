@@ -17,6 +17,9 @@ export const users = mysqlTable("users", {
   stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
   subscriptionStatus: mysqlEnum("subscriptionStatus", ["active", "canceled", "past_due", "trialing", "incomplete"]).default("active"),
   subscriptionEndsAt: timestamp("subscriptionEndsAt"),
+  // Email verification
+  isEmailVerified: boolean("isEmailVerified").default(false).notNull(),
+  emailVerifiedAt: timestamp("emailVerifiedAt"),
   // Timestamps
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -1209,3 +1212,59 @@ export const portfolioValueSnapshots = mysqlTable("portfolio_value_snapshots", {
 
 export type PortfolioValueSnapshot = typeof portfolioValueSnapshots.$inferSelect;
 export type InsertPortfolioValueSnapshot = typeof portfolioValueSnapshots.$inferInsert;
+
+// ============================================
+// Phase 32-33: Email Configuration & Verification
+// ============================================
+
+/**
+ * Platform email configuration - stores SendGrid API key and settings
+ * Only one active configuration at a time (singleton pattern)
+ */
+export const emailConfig = mysqlTable("email_config", {
+  id: int("id").autoincrement().primaryKey(),
+  // SendGrid settings
+  sendgridApiKey: text("sendgridApiKey"), // Encrypted
+  senderEmail: varchar("senderEmail", { length: 320 }),
+  senderName: varchar("senderName", { length: 255 }),
+  replyToEmail: varchar("replyToEmail", { length: 320 }),
+  // Email settings
+  isEnabled: boolean("isEnabled").default(false).notNull(),
+  dailyLimit: int("dailyLimit").default(1000),
+  // Test mode
+  testMode: boolean("testMode").default(true).notNull(),
+  testEmail: varchar("testEmail", { length: 320 }),
+  // Stats
+  emailsSentToday: int("emailsSentToday").default(0),
+  lastResetAt: timestamp("lastResetAt"),
+  // Metadata
+  configuredBy: int("configuredBy"), // Admin user ID
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmailConfig = typeof emailConfig.$inferSelect;
+export type InsertEmailConfig = typeof emailConfig.$inferInsert;
+
+/**
+ * Email verification tokens for user email confirmation
+ */
+export const emailVerifications = mysqlTable("email_verifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  // Status
+  isVerified: boolean("isVerified").default(false).notNull(),
+  verifiedAt: timestamp("verifiedAt"),
+  // Expiration
+  expiresAt: timestamp("expiresAt").notNull(),
+  // Tracking
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+  resendCount: int("resendCount").default(0),
+  lastResendAt: timestamp("lastResendAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type EmailVerification = typeof emailVerifications.$inferSelect;
+export type InsertEmailVerification = typeof emailVerifications.$inferInsert;

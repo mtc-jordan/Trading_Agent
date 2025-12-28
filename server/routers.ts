@@ -106,6 +106,208 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         return testSendGridApiKey(input.apiKey);
       }),
+
+    // Email Verification
+    getVerificationStatus: protectedProcedure.query(async ({ ctx }) => {
+      const verification = await db.getEmailVerificationByUserId(ctx.user.id);
+      return {
+        isVerified: ctx.user.isEmailVerified || false,
+        email: ctx.user.email,
+        verifiedAt: ctx.user.emailVerifiedAt,
+        hasPendingVerification: verification && !verification.isVerified && new Date(verification.expiresAt) > new Date(),
+        canResend: !verification || (verification.resendCount || 0) < 5,
+      };
+    }),
+
+    sendVerificationEmail: protectedProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ ctx, input }) => {
+        // Check if already verified
+        if (ctx.user.isEmailVerified) {
+          return { success: false, error: "Email already verified" };
+        }
+
+        // Check email config
+        const canSend = await db.canSendEmail();
+        if (!canSend.allowed) {
+          return { success: false, error: canSend.reason };
+        }
+
+        // Check resend limit
+        const existing = await db.getEmailVerificationByUserId(ctx.user.id);
+        if (existing && (existing.resendCount || 0) >= 5) {
+          return { success: false, error: "Too many verification emails sent. Please contact support." };
+        }
+
+        // Generate token
+        const token = crypto.randomUUID().replace(/-/g, "");
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        // Create verification record
+        await db.createEmailVerification({
+          userId: ctx.user.id,
+          email: input.email,
+          token,
+          expiresAt,
+        });
+
+        // Send verification email
+        const config = await db.getEmailConfig();
+        if (!config?.sendgridApiKey) {
+          return { success: false, error: "Email service not configured" };
+        }
+
+        try {
+          const verifyUrl = `${process.env.VITE_OAUTH_PORTAL_URL || ''}/verify-email?token=${token}`;
+          
+          const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${config.sendgridApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              personalizations: [{ to: [{ email: config.testMode ? config.testEmail : input.email }] }],
+              from: { email: config.senderEmail || "noreply@tradoverse.com", name: config.senderName || "TradoVerse" },
+              subject: "Verify your email - TradoVerse",
+              content: [{
+                type: "text/html",
+                value: `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #10b981;">Verify Your Email</h2>
+                    <p>Hi ${ctx.user.name || 'there'},</p>
+                    <p>Please verify your email address to enable notifications and unlock all features.</p>
+                    <p style="margin: 30px 0;">
+                      <a href="${verifyUrl}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Verify Email</a>
+                    </p>
+                    <p>Or copy and paste this link in your browser:</p>
+                    <p style="color: #6b7280; word-break: break-all;">${verifyUrl}</p>
+                    <p>This link expires in 24 hours.</p>
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+                    <p style="color: #6b7280; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+                  </div>
+                `
+              }]
+            }),
+          });
+
+          if (!response.ok) {
+            return { success: false, error: "Failed to send verification email" };
+          }
+
+          await db.incrementEmailsSentToday();
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : "Failed to send email" };
+        }
+      }),
+
+    verifyEmail: publicProcedure
+      .input(z.object({ token: z.string() }))
+      .mutation(async ({ input }) => {
+        const verification = await db.getEmailVerificationByToken(input.token);
+        
+        if (!verification) {
+          return { success: false, error: "Invalid verification token" };
+        }
+
+        if (verification.isVerified) {
+          return { success: true, message: "Email already verified" };
+        }
+
+        if (new Date(verification.expiresAt) < new Date()) {
+          return { success: false, error: "Verification link has expired" };
+        }
+
+        // Mark as verified
+        const success = await db.markEmailVerified(input.token);
+        if (!success) {
+          return { success: false, error: "Failed to verify email" };
+        }
+
+        // Update user record
+        const dbInstance = await db.getDb();
+        if (dbInstance) {
+          const { users } = await import("../drizzle/schema");
+          const { eq } = await import("drizzle-orm");
+          await dbInstance.update(users)
+            .set({ 
+              isEmailVerified: true, 
+              emailVerifiedAt: new Date(),
+              email: verification.email 
+            })
+            .where(eq(users.id, verification.userId));
+        }
+
+        return { success: true, message: "Email verified successfully" };
+      }),
+
+    resendVerification: protectedProcedure.mutation(async ({ ctx }) => {
+      const verification = await db.getEmailVerificationByUserId(ctx.user.id);
+      
+      if (!verification) {
+        return { success: false, error: "No pending verification found" };
+      }
+
+      if (verification.isVerified) {
+        return { success: false, error: "Email already verified" };
+      }
+
+      if ((verification.resendCount || 0) >= 5) {
+        return { success: false, error: "Too many resend attempts" };
+      }
+
+      // Increment resend count
+      await db.incrementResendCount(ctx.user.id);
+
+      // Send new verification email
+      const config = await db.getEmailConfig();
+      if (!config?.sendgridApiKey) {
+        return { success: false, error: "Email service not configured" };
+      }
+
+      try {
+        const verifyUrl = `${process.env.VITE_OAUTH_PORTAL_URL || ''}/verify-email?token=${verification.token}`;
+        
+        const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${config.sendgridApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            personalizations: [{ to: [{ email: config.testMode ? config.testEmail : verification.email }] }],
+            from: { email: config.senderEmail || "noreply@tradoverse.com", name: config.senderName || "TradoVerse" },
+            subject: "Verify your email - TradoVerse",
+            content: [{
+              type: "text/html",
+              value: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #10b981;">Verify Your Email</h2>
+                  <p>Hi ${ctx.user.name || 'there'},</p>
+                  <p>Here's your verification link again:</p>
+                  <p style="margin: 30px 0;">
+                    <a href="${verifyUrl}" style="background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Verify Email</a>
+                  </p>
+                  <p>This link expires in 24 hours.</p>
+                  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+                  <p style="color: #6b7280; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+                </div>
+              `
+            }]
+          }),
+        });
+
+        if (!response.ok) {
+          return { success: false, error: "Failed to send verification email" };
+        }
+
+        await db.incrementEmailsSentToday();
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : "Failed to send email" };
+      }
+    }),
   }),
 
   // ==================== TRADING ACCOUNT ROUTES ====================
@@ -1099,6 +1301,98 @@ export const appRouter = router({
         await db.updateUserSubscription(input.userId, { subscriptionTier: input.tier });
         return { success: true };
       }),
+
+    // Email Configuration
+    getEmailConfig: adminProcedure.query(async () => {
+      const config = await db.getEmailConfig();
+      if (!config) {
+        return {
+          id: null,
+          isEnabled: false,
+          senderEmail: null,
+          senderName: null,
+          replyToEmail: null,
+          dailyLimit: 1000,
+          testMode: true,
+          testEmail: null,
+          emailsSentToday: 0,
+          hasApiKey: false,
+        };
+      }
+      return {
+        id: config.id,
+        isEnabled: config.isEnabled,
+        senderEmail: config.senderEmail,
+        senderName: config.senderName,
+        replyToEmail: config.replyToEmail,
+        dailyLimit: config.dailyLimit,
+        testMode: config.testMode,
+        testEmail: config.testEmail,
+        emailsSentToday: config.emailsSentToday,
+        hasApiKey: !!config.sendgridApiKey,
+      };
+    }),
+
+    updateEmailConfig: adminProcedure
+      .input(z.object({
+        sendgridApiKey: z.string().optional(),
+        senderEmail: z.string().email().optional(),
+        senderName: z.string().optional(),
+        replyToEmail: z.string().email().optional().nullable(),
+        isEnabled: z.boolean().optional(),
+        dailyLimit: z.number().min(1).max(100000).optional(),
+        testMode: z.boolean().optional(),
+        testEmail: z.string().email().optional().nullable(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const data: Record<string, unknown> = {
+          ...input,
+          configuredBy: ctx.user.id,
+        };
+        
+        // Only update API key if provided
+        if (input.sendgridApiKey === undefined) {
+          delete data.sendgridApiKey;
+        }
+        
+        await db.upsertEmailConfig(data);
+        return { success: true };
+      }),
+
+    testEmailConnection: adminProcedure
+      .input(z.object({
+        apiKey: z.string().optional(),
+        testEmail: z.string().email(),
+      }))
+      .mutation(async ({ input }) => {
+        // Get current config or use provided API key
+        const config = await db.getEmailConfig();
+        const apiKey = input.apiKey || config?.sendgridApiKey;
+        
+        if (!apiKey) {
+          return { success: false, error: "No SendGrid API key configured" };
+        }
+        
+        try {
+          const result = await testSendGridApiKey(apiKey, input.testEmail);
+          return result;
+        } catch (error) {
+          return { 
+            success: false, 
+            error: error instanceof Error ? error.message : "Failed to send test email" 
+          };
+        }
+      }),
+
+    getEmailStats: adminProcedure.query(async () => {
+      const config = await db.getEmailConfig();
+      return {
+        emailsSentToday: config?.emailsSentToday || 0,
+        dailyLimit: config?.dailyLimit || 1000,
+        lastResetAt: config?.lastResetAt,
+        isEnabled: config?.isEnabled || false,
+      };
+    }),
   }),
 
   // ==================== PHASE 14: PERFORMANCE TRACKING ====================

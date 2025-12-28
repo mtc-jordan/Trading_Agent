@@ -1,4 +1,4 @@
-import { eq, and, desc, gte, lte, sql, like, or, inArray, asc } from "drizzle-orm";
+import { eq, sql, desc, count, sum, gte, lte, like, or, inArray, and, lt, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -38,7 +38,10 @@ import {
   strategyRatings, InsertStrategyRating, StrategyRating,
   activityFeed, InsertActivityFeed, ActivityFeed,
   userBadges, InsertUserBadge, UserBadge,
-  badgeDefinitions, BadgeId
+  badgeDefinitions, BadgeId,
+  // Phase 32-33: Email Configuration & Verification
+  emailConfig, InsertEmailConfig, EmailConfig,
+  emailVerifications, InsertEmailVerification, EmailVerification
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1722,4 +1725,181 @@ export async function getBadgeDefinition(badgeId: BadgeId) {
 
 export async function getAllBadgeDefinitions() {
   return badgeDefinitions;
+}
+
+// ============================================
+// Phase 32-33: Email Configuration & Verification
+// ============================================
+
+// Email Configuration Functions
+export async function getEmailConfig(): Promise<EmailConfig | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const results = await db.select().from(emailConfig).limit(1);
+  return results[0];
+}
+
+export async function createEmailConfig(data: InsertEmailConfig): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(emailConfig).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function updateEmailConfig(id: number, data: Partial<InsertEmailConfig>): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(emailConfig).set(data).where(eq(emailConfig.id, id));
+}
+
+export async function upsertEmailConfig(data: Partial<InsertEmailConfig>): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const existing = await getEmailConfig();
+  if (existing) {
+    await updateEmailConfig(existing.id, data);
+    return existing.id;
+  } else {
+    return await createEmailConfig(data as InsertEmailConfig);
+  }
+}
+
+export async function incrementEmailsSentToday(): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const config = await getEmailConfig();
+  if (!config) return;
+  
+  // Reset counter if it's a new day
+  const now = new Date();
+  const lastReset = config.lastResetAt ? new Date(config.lastResetAt) : null;
+  const isNewDay = !lastReset || lastReset.toDateString() !== now.toDateString();
+  
+  if (isNewDay) {
+    await updateEmailConfig(config.id, {
+      emailsSentToday: 1,
+      lastResetAt: now,
+    });
+  } else {
+    await db.update(emailConfig)
+      .set({ emailsSentToday: (config.emailsSentToday || 0) + 1 })
+      .where(eq(emailConfig.id, config.id));
+  }
+}
+
+export async function canSendEmail(): Promise<{ allowed: boolean; reason?: string }> {
+  const config = await getEmailConfig();
+  
+  if (!config) {
+    return { allowed: false, reason: "Email not configured" };
+  }
+  
+  if (!config.isEnabled) {
+    return { allowed: false, reason: "Email sending is disabled" };
+  }
+  
+  if (!config.sendgridApiKey) {
+    return { allowed: false, reason: "SendGrid API key not configured" };
+  }
+  
+  const dailyLimit = config.dailyLimit || 1000;
+  const sentToday = config.emailsSentToday || 0;
+  
+  // Check if we need to reset the counter
+  const now = new Date();
+  const lastReset = config.lastResetAt ? new Date(config.lastResetAt) : null;
+  const isNewDay = !lastReset || lastReset.toDateString() !== now.toDateString();
+  
+  if (isNewDay) {
+    return { allowed: true };
+  }
+  
+  if (sentToday >= dailyLimit) {
+    return { allowed: false, reason: `Daily email limit (${dailyLimit}) reached` };
+  }
+  
+  return { allowed: true };
+}
+
+// Email Verification Functions
+export async function createEmailVerification(data: InsertEmailVerification): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(emailVerifications).values(data);
+  return Number(result[0].insertId);
+}
+
+export async function getEmailVerificationByToken(token: string): Promise<EmailVerification | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const results = await db.select().from(emailVerifications).where(eq(emailVerifications.token, token));
+  return results[0];
+}
+
+export async function getEmailVerificationByUserId(userId: number): Promise<EmailVerification | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const results = await db.select().from(emailVerifications)
+    .where(eq(emailVerifications.userId, userId))
+    .orderBy(desc(emailVerifications.createdAt))
+    .limit(1);
+  return results[0];
+}
+
+export async function markEmailVerified(token: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  
+  const verification = await getEmailVerificationByToken(token);
+  if (!verification) return false;
+  
+  // Check if expired
+  if (new Date(verification.expiresAt) < new Date()) {
+    return false;
+  }
+  
+  // Mark as verified
+  await db.update(emailVerifications)
+    .set({ 
+      isVerified: true, 
+      verifiedAt: new Date() 
+    })
+    .where(eq(emailVerifications.token, token));
+  
+  return true;
+}
+
+export async function incrementResendCount(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const verification = await getEmailVerificationByUserId(userId);
+  if (!verification) return;
+  
+  await db.update(emailVerifications)
+    .set({ 
+      resendCount: (verification.resendCount || 0) + 1,
+      lastResendAt: new Date()
+    })
+    .where(eq(emailVerifications.id, verification.id));
+}
+
+export async function deleteExpiredVerifications(): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(emailVerifications)
+    .where(
+      and(
+        eq(emailVerifications.isVerified, false),
+        lt(emailVerifications.expiresAt, new Date())
+      )
+    );
+}
+
+export async function isUserEmailVerified(userId: number): Promise<boolean> {
+  const verification = await getEmailVerificationByUserId(userId);
+  return verification?.isVerified === true;
 }

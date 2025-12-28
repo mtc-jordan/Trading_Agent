@@ -376,3 +376,28 @@
 - [x] Create Email Queue tab with delivery stats
 - [x] Add Admin menu section in sidebar for admin users
 - [x] Restrict access to admin role only
+
+## Phase 32: Admin Email Configuration (SendGrid)
+- [x] Create email_config table for storing SendGrid API key and settings
+- [x] Create admin API routes for email configuration CRUD
+- [x] Build Email Settings panel in Admin dashboard (/admin/email)
+- [x] Add SendGrid API key input with show/hide toggle
+- [x] Add sender email/name configuration
+- [x] Add daily email limit setting
+- [x] Add test mode with test email recipient
+- [x] Add test connection functionality with test email sending
+- [x] Add email statistics display (sent today, queue size)
+- [x] Add Email Settings to admin sidebar menu
+- [x] Update twilioEmail service to use admin-configured API key
+
+## Phase 33: Email Verification Flow
+- [x] Create email_verifications table for verification tokens
+- [x] Add isEmailVerified and emailVerifiedAt fields to users table
+- [x] Create verification token generation and validation API
+- [x] Create sendVerificationEmail mutation with rate limiting
+- [x] Create verifyEmail mutation for token verification
+- [x] Create resendVerification mutation (max 5 resends)
+- [x] Build VerifyEmail page UI for token verification
+- [x] Add email verification section to Settings page
+- [x] Add verification status indicator with resend option
+- [x] Show verified badge when email is confirmed

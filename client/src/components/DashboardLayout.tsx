@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock, Activity } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock, Activity, Mail } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -45,6 +45,7 @@ const menuItems = [
 
 const adminMenuItems = [
   { icon: Activity, label: "Job Monitor", path: "/admin/jobs" },
+  { icon: Mail, label: "Email Settings", path: "/admin/email" },
   { icon: Shield, label: "Admin Panel", path: "/admin" },
 ];
 
