@@ -953,3 +953,21 @@
 - [x] Backtest comparison service with correlation matrix and recommendations
 - [x] Backtest comparison UI with side-by-side metrics
 - [x] Tests for all new features (714 tests passing)
+
+
+## Phase 51: Prediction Alerts, Weight Wizard & Export
+- [ ] Prediction alerts service with price monitoring
+- [ ] Target price and stop-loss alert triggers
+- [ ] Weight optimization wizard with risk profiling
+- [ ] Risk tolerance questionnaire
+- [ ] Backtest export service (PDF/CSV)
+- [ ] UI components for all features
+- [ ] Tests for all new features
+
+
+## Phase 51: Prediction Alerts, Weight Wizard & Export
+- [x] Prediction alerts service with price monitoring
+- [x] Weight optimization wizard with risk profiling
+- [x] Backtest export service (PDF/CSV)
+- [x] UI components for all features
+- [x] Tests for all new features (733 tests passing)

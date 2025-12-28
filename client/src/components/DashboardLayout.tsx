@@ -56,6 +56,7 @@ const menuItems = [
   { icon: Activity, label: "Strategy Backtester", path: "/strategy-backtester" },
   { icon: TrendingUp, label: "Agent Weights", path: "/agent-weights" },
   { icon: BarChart3, label: "Backtest Compare", path: "/backtest-comparison" },
+  { icon: Settings, label: "Weight Optimizer", path: "/weight-optimization" },
   { icon: Store, label: "Marketplace", path: "/marketplace" },
   { icon: MessageSquare, label: "Community", path: "/community" },
   { icon: User, label: "Profile", path: "/profile" },

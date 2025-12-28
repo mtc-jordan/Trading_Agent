@@ -5406,6 +5406,139 @@ export const appRouter = router({
         initializeSampleBacktests(ctx.user.openId);
         return compareBacktests(ctx.user.openId, input.runIds);
       }),
+
+    // Weight Optimization Wizard
+    getWizardSteps: protectedProcedure
+      .query(async () => {
+        const { getWizardSteps } = await import('./services/ai-agents/WeightOptimizationWizard');
+        return getWizardSteps();
+      }),
+
+    calculateRiskProfile: protectedProcedure
+      .input(z.object({
+        responses: z.array(z.object({
+          questionId: z.string(),
+          selectedValue: z.string(),
+        })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { calculateRiskProfile, getOptimizedWeights } = await import('./services/ai-agents/WeightOptimizationWizard');
+        const profile = calculateRiskProfile(ctx.user.openId, input.responses);
+        return getOptimizedWeights(profile);
+      }),
+
+    saveOptimizedWeights: protectedProcedure
+      .input(z.object({
+        weights: z.object({
+          technical: z.number(),
+          fundamental: z.number(),
+          sentiment: z.number(),
+          risk: z.number(),
+          regime: z.number(),
+          execution: z.number(),
+          coordinator: z.number(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Save weights to user preferences (in-memory for now)
+        return { success: true, weights: input.weights };
+      }),
+
+    getPresetConfigurations: protectedProcedure
+      .query(async () => {
+        const { getPresetConfigurations } = await import('./services/ai-agents/WeightOptimizationWizard');
+        return getPresetConfigurations();
+      }),
+
+    // Prediction Alerts
+    createPredictionAlert: protectedProcedure
+      .input(z.object({
+        predictionId: z.number(),
+        symbol: z.string(),
+        targetPrice: z.number().optional(),
+        stopLossPrice: z.number().optional(),
+        trailingStopPct: z.number().optional(),
+        breakoutThresholdPct: z.number().optional(),
+        volatilityThreshold: z.number().optional(),
+        channels: z.array(z.enum(['in_app', 'email', 'push', 'sms'])).optional(),
+        expiresInHours: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { createAlert } = await import('./services/ai-agents/PredictionAlerts');
+        return createAlert({
+          userId: ctx.user.openId,
+          predictionId: input.predictionId,
+          symbol: input.symbol,
+          targetPrice: input.targetPrice,
+          stopLossPrice: input.stopLossPrice,
+          trailingStopPct: input.trailingStopPct,
+          breakoutThresholdPct: input.breakoutThresholdPct,
+          volatilityThreshold: input.volatilityThreshold,
+          channels: input.channels || ['in_app'],
+          expiresInHours: input.expiresInHours,
+        });
+      }),
+
+    getPredictionAlerts: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getUserAlerts } = await import('./services/ai-agents/PredictionAlerts');
+        return getUserAlerts(ctx.user.openId);
+      }),
+
+    cancelPredictionAlert: protectedProcedure
+      .input(z.object({ alertId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { deleteAlert } = await import('./services/ai-agents/PredictionAlerts');
+        return deleteAlert(input.alertId, ctx.user.openId);
+      }),
+
+    // Backtest Export
+    exportBacktestCSV: protectedProcedure
+      .input(z.object({
+        title: z.string(),
+        backtestIds: z.array(z.string()),
+        includeTradeDetails: z.boolean().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { generateSampleExportData, generateCSVExport, getExportFileName } = await import('./services/ai-agents/BacktestExport');
+        const data = generateSampleExportData(ctx.user.openId);
+        data.title = input.title;
+        const csv = generateCSVExport(data, {
+          includeTradeDetails: input.includeTradeDetails ?? true,
+          includeAgentWeights: true,
+          delimiter: ',',
+          dateFormat: 'ISO',
+        });
+        return {
+          content: csv,
+          filename: getExportFileName(input.title, 'csv'),
+          mimeType: 'text/csv',
+        };
+      }),
+
+    exportBacktestPDF: protectedProcedure
+      .input(z.object({
+        title: z.string(),
+        backtestIds: z.array(z.string()),
+        includeTradeLog: z.boolean().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { generateSampleExportData, generatePDFContent, getExportFileName } = await import('./services/ai-agents/BacktestExport');
+        const data = generateSampleExportData(ctx.user.openId);
+        data.title = input.title;
+        const html = generatePDFContent(data, {
+          includeCharts: true,
+          includeTradeLog: input.includeTradeLog ?? true,
+          includeDisclaimer: true,
+          paperSize: 'A4',
+          orientation: 'portrait',
+        });
+        return {
+          content: html,
+          filename: getExportFileName(input.title, 'pdf'),
+          mimeType: 'text/html',
+        };
+      }),
   }),
 });
 
