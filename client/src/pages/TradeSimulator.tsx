@@ -37,8 +37,15 @@ import {
   Percent,
   Activity,
   Scale,
-  Info
+  Info,
+  FileText,
+  Rocket,
+  Search,
+  Loader2,
+  ExternalLink
 } from "lucide-react";
+import { useBroker } from "@/contexts/BrokerContext";
+import { toast } from "sonner";
 
 interface SimulatedTrade {
   id: string;
@@ -89,6 +96,32 @@ export default function TradeSimulator() {
   
   // Compare scenarios mutation
   const compareMutation = trpc.broker.compareScenarios.useMutation();
+  
+  // Templates
+  const { data: templates, isLoading: loadingTemplates } = trpc.broker.getTemplates.useQuery();
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [templateSearch, setTemplateSearch] = useState('');
+  
+  // Trade execution
+  const { connectedBrokers, activeBroker } = useBroker();
+  const executeMutation = trpc.broker.executeTrades.useMutation({
+    onSuccess: (data) => {
+      if (data.status === 'filled') {
+        toast.success(`Successfully executed ${data.trades.length} trades`);
+      } else if (data.status === 'partial') {
+        toast.warning(`Partially executed: ${data.trades.filter(t => t.status === 'filled').length}/${data.trades.length} trades`);
+      } else {
+        toast.error(`Execution failed: ${data.errors.join(', ')}`);
+      }
+    },
+    onError: (error) => {
+      toast.error(`Execution error: ${error.message}`);
+    },
+  });
+  const generateTradesMutation = trpc.broker.generateTradesFromTemplate.useMutation();
+  const [showExecuteDialog, setShowExecuteDialog] = useState(false);
+  const [selectedBrokerId, setSelectedBrokerId] = useState<string>('');
+  const [dryRun, setDryRun] = useState(true);
 
   // Load sample positions
   const loadSamplePositions = () => {
@@ -200,10 +233,14 @@ export default function TradeSimulator() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsList className="grid w-full grid-cols-5 lg:w-[600px]">
             <TabsTrigger value="builder">
               <Layers className="h-4 w-4 mr-2" />
               Builder
+            </TabsTrigger>
+            <TabsTrigger value="templates">
+              <FileText className="h-4 w-4 mr-2" />
+              Templates
             </TabsTrigger>
             <TabsTrigger value="results" disabled={!result}>
               <BarChart3 className="h-4 w-4 mr-2" />
@@ -212,6 +249,10 @@ export default function TradeSimulator() {
             <TabsTrigger value="compare" disabled={scenarios.length < 2}>
               <Scale className="h-4 w-4 mr-2" />
               Compare
+            </TabsTrigger>
+            <TabsTrigger value="execute" disabled={trades.length === 0}>
+              <Rocket className="h-4 w-4 mr-2" />
+              Execute
             </TabsTrigger>
           </TabsList>
 
@@ -914,6 +955,316 @@ export default function TradeSimulator() {
                 </Card>
               </>
             )}
+          </TabsContent>
+
+          {/* Templates Tab */}
+          <TabsContent value="templates" className="space-y-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search templates..."
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="sector_rotation">Sector Rotation</SelectItem>
+                  <SelectItem value="dividend_growth">Dividend Growth</SelectItem>
+                  <SelectItem value="momentum">Momentum</SelectItem>
+                  <SelectItem value="value">Value</SelectItem>
+                  <SelectItem value="defensive">Defensive</SelectItem>
+                  <SelectItem value="growth">Growth</SelectItem>
+                  <SelectItem value="balanced">Balanced</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {loadingTemplates ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {templates
+                  ?.filter(t => selectedCategory === 'all' || t.category === selectedCategory)
+                  .filter(t => !templateSearch || t.name.toLowerCase().includes(templateSearch.toLowerCase()) || t.tags.some(tag => tag.includes(templateSearch.toLowerCase())))
+                  .map((template) => (
+                    <Card key={template.id} className="hover:border-primary/50 transition-colors">
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-lg">{template.name}</CardTitle>
+                            <CardDescription className="mt-1">
+                              {template.description.slice(0, 100)}...
+                            </CardDescription>
+                          </div>
+                          <Badge variant={
+                            template.riskLevel === 'conservative' ? 'outline' :
+                            template.riskLevel === 'moderate' ? 'secondary' : 'destructive'
+                          }>
+                            {template.riskLevel}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Est. Return</span>
+                            <p className="font-semibold text-green-500">+{(template.estimatedReturn * 100).toFixed(1)}%</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Volatility</span>
+                            <p className="font-semibold">{(template.estimatedVolatility * 100).toFixed(1)}%</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Rebalance</span>
+                            <p className="font-semibold capitalize">{template.rebalanceFrequency}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Min Investment</span>
+                            <p className="font-semibold">${template.minInvestment.toLocaleString()}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-1">
+                          {template.tags.slice(0, 4).map((tag) => (
+                            <Badge key={tag} variant="outline" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        <Separator />
+
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Top Holdings</p>
+                          <div className="space-y-1">
+                            {template.targetAllocation.slice(0, 3).map((alloc) => (
+                              <div key={alloc.symbol} className="flex items-center justify-between text-sm">
+                                <span>{alloc.symbol}</span>
+                                <span className="text-muted-foreground">{alloc.targetPercent}%</span>
+                              </div>
+                            ))}
+                            {template.targetAllocation.length > 3 && (
+                              <p className="text-xs text-muted-foreground">+{template.targetAllocation.length - 3} more</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <Button 
+                          className="w-full" 
+                          onClick={() => {
+                            const portfolioValue = positions.reduce((sum, p) => sum + p.marketValue, 0) + cash;
+                            generateTradesMutation.mutate({
+                              templateId: template.id,
+                              portfolioValue: portfolioValue || 100000,
+                              currentPositions: positions.map(p => ({
+                                symbol: p.symbol,
+                                quantity: p.quantity,
+                                currentPrice: p.currentPrice,
+                              })),
+                              currentCash: cash,
+                            }, {
+                              onSuccess: (generatedTrades) => {
+                                setTrades(generatedTrades.map((t, i) => ({
+                                  id: `template-${Date.now()}-${i}`,
+                                  symbol: t.symbol,
+                                  side: t.side,
+                                  quantity: t.quantity,
+                                  estimatedPrice: t.estimatedPrice,
+                                })));
+                                setScenarioName(template.name);
+                                setActiveTab('builder');
+                                toast.success(`Generated ${generatedTrades.length} trades from template`);
+                              },
+                            });
+                          }}
+                          disabled={generateTradesMutation.isPending}
+                        >
+                          {generateTradesMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Play className="h-4 w-4 mr-2" />
+                          )}
+                          Use Template
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Execute Tab */}
+          <TabsContent value="execute" className="space-y-6">
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Live Trade Execution</AlertTitle>
+              <AlertDescription>
+                This will execute real trades through your connected broker. Please review all trades carefully before proceeding.
+              </AlertDescription>
+            </Alert>
+
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Trades to Execute</CardTitle>
+                  <CardDescription>
+                    {trades.length} trade{trades.length !== 1 ? 's' : ''} ready for execution
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[400px]">
+                    <div className="space-y-3">
+                      {trades.map((trade) => (
+                        <div key={trade.id} className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Badge variant={trade.side === 'buy' ? 'default' : 'destructive'}>
+                                {trade.side.toUpperCase()}
+                              </Badge>
+                              <span className="font-semibold text-lg">{trade.symbol}</span>
+                            </div>
+                            <span className="text-lg font-bold">
+                              ${(trade.quantity * trade.estimatedPrice).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-3 text-sm text-muted-foreground">
+                            <div>Quantity: {trade.quantity}</div>
+                            <div>Est. Price: ${trade.estimatedPrice.toFixed(2)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Execution Settings</CardTitle>
+                  <CardDescription>
+                    Configure how trades will be executed
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label>Select Broker</Label>
+                    <Select value={selectedBrokerId} onValueChange={setSelectedBrokerId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a connected broker" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {connectedBrokers.map((broker) => (
+                          <SelectItem key={broker.id} value={broker.id}>
+                            <div className="flex items-center gap-2">
+                              <span className="capitalize">{broker.brokerType.replace('_', ' ')}</span>
+                              {broker.isPaper && <Badge variant="outline">Paper</Badge>}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {connectedBrokers.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        No brokers connected. <a href="/settings" className="text-primary hover:underline">Connect a broker</a>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <p className="font-medium">Dry Run Mode</p>
+                      <p className="text-sm text-muted-foreground">
+                        Simulate execution without placing real orders
+                      </p>
+                    </div>
+                    <Button
+                      variant={dryRun ? 'default' : 'outline'}
+                      onClick={() => setDryRun(!dryRun)}
+                    >
+                      {dryRun ? 'Enabled' : 'Disabled'}
+                    </Button>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Total Buy Value</span>
+                      <span className="font-semibold text-green-500">
+                        ${tradeTotals.buys.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Total Sell Value</span>
+                      <span className="font-semibold text-red-500">
+                        ${tradeTotals.sells.toLocaleString()}
+                      </span>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Net Cash Flow</span>
+                      <span className={`text-lg font-bold ${tradeTotals.net >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {tradeTotals.net >= 0 ? '+' : ''}${tradeTotals.net.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    disabled={!selectedBrokerId || trades.length === 0 || executeMutation.isPending}
+                    onClick={() => {
+                      executeMutation.mutate({
+                        connectionId: selectedBrokerId,
+                        trades: trades.map(t => ({
+                          symbol: t.symbol,
+                          side: t.side,
+                          quantity: t.quantity,
+                          estimatedPrice: t.estimatedPrice,
+                        })),
+                        dryRun,
+                      });
+                    }}
+                  >
+                    {executeMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Rocket className="h-4 w-4 mr-2" />
+                    )}
+                    {dryRun ? 'Run Simulation' : 'Execute Trades'}
+                  </Button>
+
+                  {executeMutation.data && (
+                    <Alert variant={executeMutation.data.status === 'filled' ? 'default' : 'destructive'}>
+                      {executeMutation.data.status === 'filled' ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4" />
+                      )}
+                      <AlertTitle>
+                        {executeMutation.data.status === 'filled' ? 'Execution Complete' : 'Execution Issues'}
+                      </AlertTitle>
+                      <AlertDescription>
+                        {executeMutation.data.trades.filter(t => t.status === 'filled').length} of {executeMutation.data.trades.length} trades executed.
+                        Total value: ${executeMutation.data.totalValue.toLocaleString()}
+                        {executeMutation.data.totalCommission > 0 && (
+                          <> | Commission: ${executeMutation.data.totalCommission.toFixed(2)}</>
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

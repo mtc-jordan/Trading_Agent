@@ -848,3 +848,22 @@
 - [x] Portfolio metrics (diversification, beta, Sharpe ratio)
 - [x] Warning system for risk alerts
 - [x] Tests for all new features (584 tests passing)
+
+
+## Phase 46: Advanced Simulation Features
+- [ ] Monte Carlo simulation engine with random market scenarios
+- [ ] Probability distribution calculations (VaR, CVaR, percentiles)
+- [ ] Simulation templates for common strategies
+- [ ] Pre-configured templates (sector rotation, dividend growth, momentum)
+- [ ] Trade execution from simulator to connected brokers
+- [ ] Execute Trades button with broker selection
+- [ ] Updated Trade Simulator UI with all new features
+- [ ] Tests for all new features
+
+
+## Phase 46: Advanced Simulation Features
+- [x] Monte Carlo stress testing engine with probability distributions
+- [x] Simulation templates service (12 pre-built templates for sector rotation, dividend growth, momentum, value, defensive, growth, balanced strategies)
+- [x] Trade execution from simulator with broker integration
+- [x] Updated Trade Simulator UI with Templates and Execute tabs
+- [x] Tests for all new features (615 tests passing)

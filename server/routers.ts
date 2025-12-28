@@ -4606,6 +4606,163 @@ export const appRouter = router({
           cash: 15000,
         };
       }),
+
+    // Get all simulation templates
+    getTemplates: publicProcedure
+      .query(async () => {
+        const { getAllTemplates } = await import('./services/simulationTemplates');
+        return getAllTemplates();
+      }),
+
+    // Get template by ID
+    getTemplateById: publicProcedure
+      .input(z.object({ id: z.string() }))
+      .query(async ({ input }) => {
+        const { getTemplateById } = await import('./services/simulationTemplates');
+        return getTemplateById(input.id);
+      }),
+
+    // Get templates by category
+    getTemplatesByCategory: publicProcedure
+      .input(z.object({ 
+        category: z.enum(['sector_rotation', 'dividend_growth', 'momentum', 'value', 'defensive', 'growth', 'balanced', 'custom'])
+      }))
+      .query(async ({ input }) => {
+        const { getTemplatesByCategory } = await import('./services/simulationTemplates');
+        return getTemplatesByCategory(input.category);
+      }),
+
+    // Search templates
+    searchTemplates: publicProcedure
+      .input(z.object({ query: z.string() }))
+      .query(async ({ input }) => {
+        const { searchTemplates } = await import('./services/simulationTemplates');
+        return searchTemplates(input.query);
+      }),
+
+    // Generate trades from template
+    generateTradesFromTemplate: protectedProcedure
+      .input(z.object({
+        templateId: z.string(),
+        portfolioValue: z.number().positive(),
+        currentPositions: z.array(z.object({
+          symbol: z.string(),
+          quantity: z.number(),
+          currentPrice: z.number(),
+        })),
+        currentCash: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        const { getTemplateById, generateTradesFromTemplate } = await import('./services/simulationTemplates');
+        const template = getTemplateById(input.templateId);
+        if (!template) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Template not found' });
+        }
+        return generateTradesFromTemplate(
+          template,
+          input.portfolioValue,
+          input.currentPositions,
+          input.currentCash
+        );
+      }),
+
+    // Execute trades through broker
+    executeTrades: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        trades: z.array(z.object({
+          symbol: z.string(),
+          side: z.enum(['buy', 'sell']),
+          quantity: z.number().positive(),
+          estimatedPrice: z.number().positive(),
+          orderType: z.enum(['market', 'limit', 'stop', 'stop_limit']).optional(),
+          limitPrice: z.number().optional(),
+          stopPrice: z.number().optional(),
+          timeInForce: z.enum(['day', 'gtc', 'ioc', 'fok']).optional(),
+        })),
+        simulationId: z.string().optional(),
+        dryRun: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { executeTrades } = await import('./services/tradeExecution');
+        return executeTrades({
+          userId: String(ctx.user.id),
+          connectionId: input.connectionId,
+          trades: input.trades,
+          simulationId: input.simulationId,
+          dryRun: input.dryRun,
+        });
+      }),
+
+    // Validate trades before execution
+    validateTrades: protectedProcedure
+      .input(z.object({
+        trades: z.array(z.object({
+          symbol: z.string(),
+          side: z.enum(['buy', 'sell']),
+          quantity: z.number(),
+          estimatedPrice: z.number(),
+          orderType: z.enum(['market', 'limit', 'stop', 'stop_limit']).optional(),
+          limitPrice: z.number().optional(),
+          stopPrice: z.number().optional(),
+        })),
+      }))
+      .query(async ({ input }) => {
+        const { validateTrades } = await import('./services/tradeExecution');
+        return validateTrades(input.trades);
+      }),
+
+    // Get execution history
+    getExecutionHistory: protectedProcedure
+      .input(z.object({
+        connectionId: z.string().optional(),
+        symbol: z.string().optional(),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        const { getExecutionHistory } = await import('./services/tradeExecution');
+        return getExecutionHistory(String(ctx.user.id), input || {});
+      }),
+
+    // Run Monte Carlo stress test
+    runStressTest: protectedProcedure
+      .input(z.object({
+        positions: z.array(z.object({
+          symbol: z.string(),
+          quantity: z.number(),
+          currentPrice: z.number(),
+          avgCost: z.number(),
+          annualizedVolatility: z.number().optional(),
+          expectedReturn: z.number().optional(),
+          beta: z.number().optional(),
+        })),
+        trades: z.array(z.object({
+          symbol: z.string(),
+          side: z.enum(['buy', 'sell']),
+          quantity: z.number(),
+          estimatedPrice: z.number(),
+        })),
+        cash: z.number(),
+        config: z.object({
+          numSimulations: z.number().optional(),
+          timeHorizonDays: z.number().optional(),
+          confidenceLevel: z.number().optional(),
+          volatilityMultiplier: z.number().optional(),
+          correlationModel: z.enum(['historical', 'stressed', 'uncorrelated']).optional(),
+        }).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { runMonteCarloSimulation } = await import('./services/monteCarloSimulation');
+        return runMonteCarloSimulation({
+          symbol: input.positions[0]?.symbol || 'SPY',
+          initialCapital: input.cash + input.positions.reduce((sum, p) => sum + p.quantity * p.currentPrice, 0),
+          numSimulations: input.config?.numSimulations || 5000,
+          timeHorizonDays: input.config?.timeHorizonDays || 252,
+          confidenceLevels: [0.95, 0.99],
+          strategyType: 'buy_hold',
+        });
+      }),
   }),
 });
 
