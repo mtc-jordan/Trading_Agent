@@ -3,6 +3,8 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import { ConnectionStatus } from "@/components/ConnectionStatus";
+import { PriceTicker } from "@/components/LivePriceDisplay";
 import { 
   ArrowDown, 
   ArrowUp, 
@@ -43,7 +45,8 @@ export default function Dashboard() {
               Welcome back, {user?.name || "Trader"}! Here's your trading overview.
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
+            <ConnectionStatus />
             <Link href="/analysis">
               <Button variant="outline" className="border-border">
                 <Brain className="w-4 h-4 mr-2" />
@@ -120,6 +123,19 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Live Price Ticker */}
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" />
+              Live Market Prices
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PriceTicker symbols={["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "NVDA", "META"]} />
+          </CardContent>
+        </Card>
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6">

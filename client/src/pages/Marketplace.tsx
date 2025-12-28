@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
+import { AccuracyBadge, AccuracyIndicator } from "@/components/AccuracyBadge";
 import { 
   Search, 
   Bot, 
@@ -13,7 +14,8 @@ import {
   Copy,
   Trophy,
   Medal,
-  Award
+  Award,
+  Target
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -121,6 +123,16 @@ export default function Marketplace() {
                         {listing.description || "No description provided"}
                       </p>
 
+                      {/* Accuracy Badge */}
+                      <div className="mb-4">
+                        <AccuracyBadge
+                          accuracyScore={(listing as any).accuracyScore}
+                          totalPredictions={(listing as any).totalPredictions || 0}
+                          correctPredictions={(listing as any).correctPredictions || 0}
+                          size="sm"
+                        />
+                      </div>
+
                       <div className="grid grid-cols-2 gap-3 mb-4">
                         <div className="p-2 rounded-lg bg-secondary/50 text-center">
                           <p className="text-xs text-muted-foreground">Return</p>
@@ -136,9 +148,10 @@ export default function Marketplace() {
                           </p>
                         </div>
                         <div className="p-2 rounded-lg bg-secondary/50 text-center">
-                          <p className="text-xs text-muted-foreground">Sharpe</p>
-                          <p className="font-bold text-foreground">
-                            {parseFloat((listing as any).sharpeRatio?.toString() || "0").toFixed(2)}
+                          <p className="text-xs text-muted-foreground">AI Accuracy</p>
+                          <p className="font-bold text-foreground flex items-center justify-center gap-1">
+                            <Target className="w-3 h-3" />
+                            <AccuracyIndicator accuracyScore={(listing as any).accuracyScore} />
                           </p>
                         </div>
                         <div className="p-2 rounded-lg bg-secondary/50 text-center">
@@ -233,6 +246,16 @@ export default function Marketplace() {
                             <p className="font-medium text-foreground">
                               {(parseFloat((entry as any).winRate?.toString() || "0") * 100).toFixed(0)}%
                             </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs text-muted-foreground">AI Accuracy</p>
+                            <AccuracyBadge
+                              accuracyScore={(entry as any).accuracyScore}
+                              totalPredictions={(entry as any).totalPredictions || 0}
+                              correctPredictions={(entry as any).correctPredictions || 0}
+                              size="sm"
+                              showLabel={false}
+                            />
                           </div>
                           <div className="text-right">
                             <p className="text-xs text-muted-foreground">Copies</p>

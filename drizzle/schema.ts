@@ -204,6 +204,10 @@ export const marketplaceListings = mysqlTable("marketplace_listings", {
   monthlyReturn: decimal("monthlyReturn", { precision: 10, scale: 4 }),
   monthlyTrades: int("monthlyTrades"),
   winRate: decimal("winRate", { precision: 10, scale: 4 }),
+  // Accuracy metrics
+  accuracyScore: decimal("accuracyScore", { precision: 5, scale: 4 }), // AI prediction accuracy
+  totalPredictions: int("totalPredictions").default(0).notNull(),
+  correctPredictions: int("correctPredictions").default(0).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   isFeatured: boolean("isFeatured").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

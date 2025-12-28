@@ -228,3 +228,25 @@
 - [x] Strategy sharing with comments/ratings (frontend)
 - [x] Activity feed for followed users (frontend)
 - [x] Reputation/badge system (frontend)
+
+## Phase 19: WebSocket Real-Time Updates
+- [x] Install Socket.IO server and client dependencies
+- [x] Create WebSocket server with authentication
+- [x] Implement live price updates channel
+- [x] Implement notification push channel
+- [x] Implement bot execution status streaming
+- [x] Create client-side Socket.IO hooks (useSocket, usePriceSubscription, useBotStatusSubscription, useNotificationSubscription)
+- [x] Add connection status indicator component
+- [x] Integrate real-time updates in Dashboard (price ticker, connection status)
+- [x] Integrate real-time updates in Notifications page
+- [ ] Price feed service integration with real market data (future)
+- [ ] Portfolio real-time value updates (future)
+
+## Phase 20: Marketplace Accuracy Badges
+- [x] Add accuracyScore, totalPredictions, correctPredictions fields to marketplace_listings schema
+- [x] Create AccuracyBadge component with tier system (Elite 85%+, Verified 75%+, Standard 60%+, Basic)
+- [x] Create AccuracyIndicator and AccuracyProgress components
+- [x] Display accuracy badges on marketplace listings
+- [x] Add accuracy column to marketplace leaderboard
+- [ ] Add accuracy filter to marketplace (future)
+- [ ] Show accuracy history on bot detail view (future)

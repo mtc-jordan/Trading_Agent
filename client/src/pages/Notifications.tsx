@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import { useNotificationSubscription } from "@/hooks/useSocket";
+import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +36,17 @@ export default function Notifications() {
   });
   
   const { data: unreadCount } = trpc.notifications.getUnreadCount.useQuery();
+  
+  // Real-time notification subscription
+  const { notifications: realtimeNotifications } = useNotificationSubscription();
+  
+  // Refresh notifications when new real-time notification arrives
+  useEffect(() => {
+    if (realtimeNotifications.length > 0) {
+      utils.notifications.list.invalidate();
+      utils.notifications.getUnreadCount.invalidate();
+    }
+  }, [realtimeNotifications.length]);
   
   const markReadMutation = trpc.notifications.markRead.useMutation({
     onSuccess: () => {

@@ -43,6 +43,13 @@
       "when": 1766888596438,
       "tag": "0005_cold_expediter",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1766889869272,
+      "tag": "0006_panoramic_metal_master",
+      "breakpoints": true
     }
   ]
 }
