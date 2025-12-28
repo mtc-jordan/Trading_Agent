@@ -4898,6 +4898,192 @@ export const appRouter = router({
         return getTemplatePerformanceSummary(input.templateId);
       }),
 
+    // === Enhanced AI Agent Routes ===
+    
+    // Analyze asset with 7 AI agents
+    analyzeWithAgents: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        assetType: z.enum(['stock', 'crypto']),
+        priceHistory: z.array(z.object({
+          timestamp: z.number(),
+          open: z.number(),
+          high: z.number(),
+          low: z.number(),
+          close: z.number(),
+          volume: z.number(),
+        })),
+        currentPrice: z.number(),
+        portfolioValue: z.number(),
+        availableCash: z.number(),
+        riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']).optional(),
+        currentPosition: z.object({
+          quantity: z.number(),
+          averagePrice: z.number(),
+          unrealizedPnL: z.number(),
+        }).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { agentOrchestrator } = await import('./services/ai-agents/AgentOrchestrator');
+        const marketData = {
+          symbol: input.symbol,
+          assetType: input.assetType,
+          currentPrice: input.currentPrice,
+          priceHistory: input.priceHistory,
+        };
+        const portfolio = {
+          portfolioValue: input.portfolioValue,
+          availableCash: input.availableCash,
+          riskTolerance: input.riskTolerance || 'moderate',
+          maxDrawdown: 0.15,
+          currentDrawdown: 0,
+          currentPosition: input.currentPosition,
+        };
+        return agentOrchestrator.orchestrate(marketData, portfolio);
+      }),
+
+    // Get enhanced AI analysis with LLM reasoning
+    getEnhancedAgentAnalysis: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        assetType: z.enum(['stock', 'crypto']),
+        currentPrice: z.number(),
+        consensusDecision: z.object({
+          finalSignal: z.string(),
+          overallConfidence: z.number(),
+          riskApproved: z.boolean(),
+          reasoning: z.string(),
+          agentVotes: z.array(z.object({
+            agentType: z.string(),
+            signal: z.string(),
+            confidence: z.number(),
+            reasoning: z.string(),
+          })),
+        }),
+      }))
+      .mutation(async ({ input }) => {
+        const { agentOrchestrator } = await import('./services/ai-agents/AgentOrchestrator');
+        const marketData = {
+          symbol: input.symbol,
+          assetType: input.assetType,
+          currentPrice: input.currentPrice,
+          priceHistory: [],
+        };
+        const consensusDecision = {
+          ...input.consensusDecision,
+          suggestedAction: { action: 'hold' as const, urgency: 'normal' as const },
+        };
+        return agentOrchestrator.getEnhancedAnalysis(marketData, consensusDecision as any);
+      }),
+
+    // Analyze crypto with specialized agents
+    analyzeCryptoWithAgents: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        metrics: z.object({
+          activeAddresses: z.number(),
+          transactionCount: z.number(),
+          averageTransactionValue: z.number(),
+          exchangeInflow: z.number(),
+          exchangeOutflow: z.number(),
+          exchangeReserves: z.number(),
+          whaleTransactions: z.number(),
+          topHolderConcentration: z.number(),
+          hashRate: z.number().optional(),
+          stakingRatio: z.number().optional(),
+          totalValueLocked: z.number().optional(),
+          liquidityDepth: z.number().optional(),
+          yieldRate: z.number().optional(),
+          fundingRate: z.number().optional(),
+          openInterest: z.number().optional(),
+          longShortRatio: z.number().optional(),
+        }),
+        tokenomics: z.object({
+          totalSupply: z.number(),
+          circulatingSupply: z.number(),
+          maxSupply: z.number().optional(),
+          inflationRate: z.number(),
+          burnRate: z.number().optional(),
+        }).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { cryptoCoordinator } = await import('./services/ai-agents/CryptoAgent');
+        return cryptoCoordinator.analyzeComprehensive(
+          input.symbol,
+          input.metrics,
+          input.tokenomics as any
+        );
+      }),
+
+    // Create trading bot
+    createTradingBot: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        assetType: z.enum(['stock', 'crypto', 'both']),
+        symbols: z.array(z.string()),
+        riskTolerance: z.enum(['conservative', 'moderate', 'aggressive']),
+        maxDrawdown: z.number(),
+        maxPositionSize: z.number(),
+        minConfidenceThreshold: z.number(),
+        consensusRequirement: z.enum(['majority', 'supermajority', 'unanimous']),
+        enableAutoTrade: z.boolean(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { createTradingBot, BotPresets } = await import('./services/ai-agents/AgenticTradingBot');
+        const config = {
+          ...input,
+          userId: String(ctx.user.id),
+          ...BotPresets[input.riskTolerance],
+        };
+        const bot = createTradingBot(config);
+        return {
+          config: bot.getConfig(),
+          state: bot.getState(),
+          statistics: bot.getStatistics(),
+        };
+      }),
+
+    // Get bot presets
+    getBotPresets: publicProcedure
+      .query(async () => {
+        const { BotPresets } = await import('./services/ai-agents/AgenticTradingBot');
+        return BotPresets;
+      }),
+
+    // Calculate technical indicators
+    calculateIndicators: publicProcedure
+      .input(z.object({
+        candles: z.array(z.object({
+          timestamp: z.number(),
+          open: z.number(),
+          high: z.number(),
+          low: z.number(),
+          close: z.number(),
+          volume: z.number(),
+        })),
+      }))
+      .query(async ({ input }) => {
+        const { calculateAllIndicators } = await import('./services/ai-agents/TechnicalIndicators');
+        return calculateAllIndicators(input.candles);
+      }),
+
+    // Detect candlestick patterns
+    detectPatterns: publicProcedure
+      .input(z.object({
+        candles: z.array(z.object({
+          timestamp: z.number(),
+          open: z.number(),
+          high: z.number(),
+          low: z.number(),
+          close: z.number(),
+          volume: z.number(),
+        })),
+      }))
+      .query(async ({ input }) => {
+        const { detectCandlestickPatterns } = await import('./services/ai-agents/TechnicalIndicators');
+        return detectCandlestickPatterns(input.candles);
+      }),
+
     // Run Monte Carlo stress test
     runStressTest: protectedProcedure
       .input(z.object({
