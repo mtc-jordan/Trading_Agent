@@ -1771,3 +1771,132 @@ export const exchangeOrders = mysqlTable("exchange_orders", {
 
 export type ExchangeOrderRecord = typeof exchangeOrders.$inferSelect;
 export type InsertExchangeOrder = typeof exchangeOrders.$inferInsert;
+
+
+/**
+ * Broker Connections
+ * Production-ready broker connections with OAuth tokens
+ */
+export const brokerConnections = mysqlTable("broker_connections", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  brokerType: mysqlEnum("brokerType", ["alpaca", "interactive_brokers", "binance", "coinbase"]).notNull(),
+  isPaper: boolean("isPaper").default(true).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  
+  // OAuth tokens (encrypted)
+  accessTokenEncrypted: text("accessTokenEncrypted"),
+  refreshTokenEncrypted: text("refreshTokenEncrypted"),
+  accessTokenSecretEncrypted: text("accessTokenSecretEncrypted"),  // For OAuth1
+  tokenExpiresAt: timestamp("tokenExpiresAt"),
+  
+  // Live Session Token for IBKR
+  liveSessionTokenEncrypted: text("liveSessionTokenEncrypted"),
+  liveSessionTokenExpiresAt: timestamp("liveSessionTokenExpiresAt"),
+  
+  // Account info
+  accountId: varchar("accountId", { length: 128 }),
+  accountNumber: varchar("accountNumber", { length: 64 }),
+  accountType: varchar("accountType", { length: 32 }),
+  
+  // Connection metadata
+  lastConnectedAt: timestamp("lastConnectedAt"),
+  lastSyncAt: timestamp("lastSyncAt"),
+  connectionError: text("connectionError"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BrokerConnectionRecord = typeof brokerConnections.$inferSelect;
+export type InsertBrokerConnection = typeof brokerConnections.$inferInsert;
+
+/**
+ * OAuth States
+ * Temporary storage for OAuth flow state
+ */
+export const oauthStates = mysqlTable("oauth_states", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  state: varchar("state", { length: 128 }).notNull().unique(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  brokerType: mysqlEnum("brokerType", ["alpaca", "interactive_brokers", "binance", "coinbase"]).notNull(),
+  isPaper: boolean("isPaper").default(true).notNull(),
+  
+  // For PKCE (OAuth2)
+  codeVerifier: varchar("codeVerifier", { length: 128 }),
+  
+  // For OAuth1
+  requestToken: varchar("requestToken", { length: 256 }),
+  requestTokenSecret: varchar("requestTokenSecret", { length: 256 }),
+  
+  expiresAt: timestamp("expiresAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OAuthStateRecord = typeof oauthStates.$inferSelect;
+export type InsertOAuthState = typeof oauthStates.$inferInsert;
+
+/**
+ * Broker Orders
+ * Orders placed through broker connections
+ */
+export const brokerOrders = mysqlTable("broker_orders", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  connectionId: varchar("connectionId", { length: 64 }).notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  brokerOrderId: varchar("brokerOrderId", { length: 128 }),
+  clientOrderId: varchar("clientOrderId", { length: 128 }),
+  
+  symbol: varchar("symbol", { length: 32 }).notNull(),
+  side: mysqlEnum("side", ["buy", "sell"]).notNull(),
+  orderType: mysqlEnum("orderType", ["market", "limit", "stop", "stop_limit", "trailing_stop"]).notNull(),
+  timeInForce: mysqlEnum("timeInForce", ["day", "gtc", "ioc", "fok", "opg", "cls"]).default("day").notNull(),
+  
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
+  price: decimal("price", { precision: 18, scale: 8 }),
+  stopPrice: decimal("stopPrice", { precision: 18, scale: 8 }),
+  trailPercent: decimal("trailPercent", { precision: 8, scale: 4 }),
+  
+  filledQuantity: decimal("filledQuantity", { precision: 18, scale: 8 }).default("0").notNull(),
+  avgFillPrice: decimal("avgFillPrice", { precision: 18, scale: 8 }),
+  
+  status: mysqlEnum("status", ["new", "pending", "accepted", "partially_filled", "filled", "cancelled", "rejected", "expired", "replaced"]).default("new").notNull(),
+  extendedHours: boolean("extendedHours").default(false).notNull(),
+  
+  filledAt: timestamp("filledAt"),
+  cancelledAt: timestamp("cancelledAt"),
+  expiredAt: timestamp("expiredAt"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BrokerOrderRecord = typeof brokerOrders.$inferSelect;
+export type InsertBrokerOrder = typeof brokerOrders.$inferInsert;
+
+/**
+ * Broker Positions
+ * Cached positions from broker connections
+ */
+export const brokerPositions = mysqlTable("broker_positions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  connectionId: varchar("connectionId", { length: 64 }).notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  
+  symbol: varchar("symbol", { length: 32 }).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
+  side: mysqlEnum("side", ["long", "short"]).notNull(),
+  avgEntryPrice: decimal("avgEntryPrice", { precision: 18, scale: 8 }).notNull(),
+  marketValue: decimal("marketValue", { precision: 18, scale: 8 }),
+  costBasis: decimal("costBasis", { precision: 18, scale: 8 }),
+  unrealizedPL: decimal("unrealizedPL", { precision: 18, scale: 8 }),
+  unrealizedPLPercent: decimal("unrealizedPLPercent", { precision: 8, scale: 4 }),
+  currentPrice: decimal("currentPrice", { precision: 18, scale: 8 }),
+  
+  lastSyncAt: timestamp("lastSyncAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BrokerPositionRecord = typeof brokerPositions.$inferSelect;
+export type InsertBrokerPosition = typeof brokerPositions.$inferInsert;

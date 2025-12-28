@@ -635,3 +635,57 @@
 - [x] Integrate into dashboard navigation
 - [x] Write unit tests for new features (404 tests passing)
 - [x] Push to GitHub
+
+
+## Phase 41: Production Broker Integration (Alpaca & Interactive Brokers)
+
+##### Phase 41: Production Broker Integration (Alpaca & Interactive Brokers)
+
+### Research & Architecture
+- [x] Research Alpaca API documentation (OAuth2, Trading API)
+- [x] Research Interactive Brokers OAuth1.0a authentication
+- [x] Study multi-broker architecture best practices
+- [x] Design scalable broker abstraction layer
+
+### Alpaca Integration
+- [x] Implement Alpaca OAuth2 authentication flow
+- [x] Create Alpaca broker adapter with trading APIs
+- [x] Implement account info and balance retrieval
+- [x] Implement order placement (market, limit, stop, stop-limit, trailing stop)
+- [x] Implement position management
+- [x] Add real-time market data streaming
+- [x] Handle paper trading vs live trading modes
+
+### Interactive Brokers Integration
+- [x] Implement OAuth1.0a authentication flow (requires approval)
+- [x] Create IBKR broker adapter
+- [x] Implement account management APIs
+- [x] Implement order execution APIs
+- [x] Handle IBKR-specific order types (options, futures, forex)
+- [x] Add market data subscription
+
+### Unified Broker Architecture
+- [x] Create IBrokerAdapter abstract interface
+- [x] Implement BrokerFactory pattern
+- [x] Add BrokerManager for connection management
+- [x] Create unified order types and responses (types.ts)
+- [x] Implement error handling and retry logic
+- [x] Add rate limiting per broker
+
+### Database & API
+- [x] Update database schema for broker credentials
+- [x] Add OAuth token storage with encryption
+- [x] Create tRPC endpoints for broker operations
+- [x] Add OAuth callback handlers
+
+### UI Components
+- [x] Build broker connection wizard with OAuth flows
+- [x] Create OAuth redirect handling
+- [x] Add broker status dashboard
+- [x] Implement order placement UI per broker
+
+### Testing
+- [x] Write unit tests for broker adapters (444 tests passing)
+- [x] Test OAuth flows
+- [x] Verify order execution
+- [x] Push to GitHub

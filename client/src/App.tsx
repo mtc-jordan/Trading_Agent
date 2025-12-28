@@ -35,6 +35,7 @@ import Alerts from "./pages/Alerts";
 import CopyTrading from "./pages/CopyTrading";
 import TradingJournal from "./pages/TradingJournal";
 import ExchangeConnections from "./pages/ExchangeConnections";
+import BrokerConnections from "./pages/BrokerConnections";
 
 function Router() {
   return (
@@ -70,6 +71,7 @@ function Router() {
       <Route path="/copy-trading" component={CopyTrading} />
       <Route path="/journal" component={TradingJournal} />
       <Route path="/exchanges" component={ExchangeConnections} />
+      <Route path="/brokers" component={BrokerConnections} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

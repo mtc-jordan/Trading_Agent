@@ -110,6 +110,34 @@ import {
   handleOAuthCallback,
   testConnection
 } from "./services/exchangeIntegration";
+import {
+  BrokerType,
+  OrderSide,
+  OrderType,
+  TimeInForce
+} from "./services/brokers/types";
+import {
+  createOAuthState,
+  getOAuthState as getBrokerOAuthState,
+  deleteOAuthState,
+  createBrokerConnection,
+  getBrokerConnection,
+  getUserBrokerConnections,
+  updateBrokerConnection,
+  deleteBrokerConnection,
+  getDecryptedTokens,
+  createBrokerOrder,
+  updateBrokerOrder,
+  getBrokerOrder,
+  getUserBrokerOrders,
+  syncBrokerPositions,
+  getUserBrokerPositions,
+  initializeBrokerAdapter,
+  getAvailableBrokers
+} from "./services/brokers/BrokerService";
+import { AlpacaAdapter } from "./services/brokers/AlpacaAdapter";
+import { IBKRAdapter } from "./services/brokers/IBKRAdapter";
+import { BROKER_INFO } from "./services/brokers/BrokerFactory";
 import { callDataApi } from "./_core/dataApi";
 import { getStockQuote, searchStocks, getCachedPrice, getAllCachedPrices, fetchStockPrice } from "./services/marketData";
 import { getUserEmailPreferences, updateUserEmailPreferences, testSendGridApiKey } from "./services/twilioEmail";
@@ -3406,6 +3434,602 @@ export const appRouter = router({
       .input(z.object({ connectionId: z.string() }))
       .query(async ({ input }) => {
         return testConnection(input.connectionId);
+      }),
+  }),
+
+  // Production Broker Integration Router
+  broker: router({
+    // Get available brokers
+    getAvailableBrokers: publicProcedure
+      .query(async () => {
+        return getAvailableBrokers();
+      }),
+
+    // Get broker info
+    getBrokerInfo: publicProcedure
+      .input(z.object({
+        brokerType: z.enum(['alpaca', 'interactive_brokers'])
+      }))
+      .query(async ({ input }) => {
+        return BROKER_INFO[input.brokerType as BrokerType];
+      }),
+
+    // Start OAuth flow for Alpaca
+    startAlpacaOAuth: protectedProcedure
+      .input(z.object({
+        isPaper: z.boolean().default(true),
+        redirectUri: z.string()
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const clientId = process.env.ALPACA_CLIENT_ID;
+        const clientSecret = process.env.ALPACA_CLIENT_SECRET;
+        
+        if (!clientId || !clientSecret) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: 'Alpaca API credentials not configured. Please add ALPACA_CLIENT_ID and ALPACA_CLIENT_SECRET.'
+          });
+        }
+        
+        const adapter = new AlpacaAdapter({
+          clientId,
+          clientSecret,
+          redirectUri: input.redirectUri,
+          isPaper: input.isPaper
+        });
+        
+        // Create OAuth state
+        const oauthState = await createOAuthState(
+          String(ctx.user.id),
+          BrokerType.ALPACA,
+          input.isPaper
+        );
+        
+        const authUrl = adapter.getAuthorizationUrl(oauthState.state, input.isPaper);
+        
+        return {
+          authUrl,
+          state: oauthState.state
+        };
+      }),
+
+    // Start OAuth flow for Interactive Brokers
+    startIBKROAuth: protectedProcedure
+      .input(z.object({
+        isPaper: z.boolean().default(true),
+        redirectUri: z.string()
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const consumerKey = process.env.IBKR_CONSUMER_KEY;
+        const privateKey = process.env.IBKR_PRIVATE_KEY;
+        const realm = process.env.IBKR_REALM || 'limited_poa';
+        
+        if (!consumerKey || !privateKey) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: 'Interactive Brokers API credentials not configured. Please add IBKR_CONSUMER_KEY and IBKR_PRIVATE_KEY.'
+          });
+        }
+        
+        const adapter = new IBKRAdapter({
+          consumerKey,
+          privateKey,
+          realm,
+          redirectUri: input.redirectUri,
+          isPaper: input.isPaper
+        });
+        
+        // Get request token for OAuth1
+        const requestTokenResult = await adapter.getRequestToken();
+        
+        // Create OAuth state with request token
+        const oauthState = await createOAuthState(
+          String(ctx.user.id),
+          BrokerType.INTERACTIVE_BROKERS,
+          input.isPaper,
+          undefined,
+          requestTokenResult.token,
+          requestTokenResult.tokenSecret
+        );
+        
+        const authUrl = adapter.getAuthorizationUrl(oauthState.state, input.isPaper);
+        
+        return {
+          authUrl,
+          state: oauthState.state
+        };
+      }),
+
+    // Handle OAuth callback for Alpaca
+    handleAlpacaCallback: protectedProcedure
+      .input(z.object({
+        code: z.string(),
+        state: z.string()
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const oauthState = await getBrokerOAuthState(input.state);
+        
+        if (!oauthState || oauthState.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Invalid or expired OAuth state'
+          });
+        }
+        
+        const clientId = process.env.ALPACA_CLIENT_ID!;
+        const clientSecret = process.env.ALPACA_CLIENT_SECRET!;
+        const redirectUri = process.env.ALPACA_REDIRECT_URI || `${process.env.VITE_APP_URL || ''}/broker/alpaca/callback`;
+        
+        const adapter = new AlpacaAdapter({
+          clientId,
+          clientSecret,
+          redirectUri,
+          isPaper: oauthState.isPaper
+        });
+        
+        // Exchange code for tokens
+        const tokens = await adapter.handleOAuthCallback(input.code, input.state);
+        
+        // Initialize adapter with tokens
+        await adapter.initialize({
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken
+        });
+        
+        // Get account info
+        const accounts = await adapter.getAccounts();
+        const account = accounts[0];
+        
+        // Create broker connection
+        const connection = await createBrokerConnection(
+          String(ctx.user.id),
+          BrokerType.ALPACA,
+          oauthState.isPaper,
+          {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresAt: tokens.expiresIn ? new Date(Date.now() + tokens.expiresIn * 1000) : undefined
+          },
+          {
+            accountId: account.id,
+            accountNumber: account.accountNumber,
+            accountType: account.accountType
+          }
+        );
+        
+        // Clean up OAuth state
+        await deleteOAuthState(input.state);
+        
+        return {
+          success: true,
+          connectionId: connection.id,
+          account: {
+            id: account.id,
+            accountNumber: account.accountNumber,
+            accountType: account.accountType,
+            isPaper: oauthState.isPaper
+          }
+        };
+      }),
+
+    // Handle OAuth callback for Interactive Brokers
+    handleIBKRCallback: protectedProcedure
+      .input(z.object({
+        oauthToken: z.string(),
+        oauthVerifier: z.string(),
+        state: z.string()
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const oauthState = await getBrokerOAuthState(input.state);
+        
+        if (!oauthState || oauthState.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Invalid or expired OAuth state'
+          });
+        }
+        
+        if (!oauthState.requestToken || !oauthState.requestTokenSecret) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Missing request token for OAuth1 flow'
+          });
+        }
+        
+        const consumerKey = process.env.IBKR_CONSUMER_KEY!;
+        const privateKey = process.env.IBKR_PRIVATE_KEY!;
+        const realm = process.env.IBKR_REALM || 'limited_poa';
+        const redirectUri = process.env.IBKR_REDIRECT_URI || `${process.env.VITE_APP_URL || ''}/broker/ibkr/callback`;
+        
+        const adapter = new IBKRAdapter({
+          consumerKey,
+          privateKey,
+          realm,
+          redirectUri,
+          isPaper: oauthState.isPaper
+        });
+        
+        // Exchange verifier for access token using handleOAuthCallback
+        const tokens = await adapter.handleOAuthCallback(
+          input.oauthVerifier,
+          oauthState.requestToken!,
+          oauthState.requestTokenSecret
+        );
+        
+        // Initialize adapter with tokens
+        await adapter.initialize({
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken
+        });
+        
+        // Get account info
+        const accounts = await adapter.getAccounts();
+        const account = accounts[0];
+        
+        // Create broker connection
+        const connection = await createBrokerConnection(
+          String(ctx.user.id),
+          BrokerType.INTERACTIVE_BROKERS,
+          oauthState.isPaper,
+          {
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken
+          },
+          {
+            accountId: account.id,
+            accountNumber: account.accountNumber,
+            accountType: account.accountType
+          }
+        );
+        
+        // Clean up OAuth state
+        await deleteOAuthState(input.state);
+        
+        return {
+          success: true,
+          connectionId: connection.id,
+          account: {
+            id: account.id,
+            accountNumber: account.accountNumber,
+            accountType: account.accountType,
+            isPaper: oauthState.isPaper
+          }
+        };
+      }),
+
+    // Get user's broker connections
+    getConnections: protectedProcedure
+      .query(async ({ ctx }) => {
+        const connections = await getUserBrokerConnections(String(ctx.user.id));
+        return connections.map(conn => ({
+          id: conn.id,
+          brokerType: conn.brokerType,
+          isPaper: conn.isPaper,
+          isActive: conn.isActive,
+          accountId: conn.accountId,
+          accountNumber: conn.accountNumber,
+          accountType: conn.accountType,
+          lastConnectedAt: conn.lastConnectedAt,
+          lastSyncAt: conn.lastSyncAt,
+          connectionError: conn.connectionError,
+          createdAt: conn.createdAt
+        }));
+      }),
+
+    // Disconnect a broker
+    disconnect: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        await deleteBrokerConnection(input.connectionId);
+        
+        return { success: true };
+      }),
+
+    // Get account balance
+    getBalance: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        const config = {
+          alpaca: process.env.ALPACA_CLIENT_ID ? {
+            clientId: process.env.ALPACA_CLIENT_ID,
+            clientSecret: process.env.ALPACA_CLIENT_SECRET!,
+            redirectUri: process.env.ALPACA_REDIRECT_URI || ''
+          } : undefined,
+          ibkr: process.env.IBKR_CONSUMER_KEY ? {
+            consumerKey: process.env.IBKR_CONSUMER_KEY,
+            privateKey: process.env.IBKR_PRIVATE_KEY!,
+            realm: process.env.IBKR_REALM || 'limited_poa',
+            redirectUri: process.env.IBKR_REDIRECT_URI || ''
+          } : undefined
+        };
+        
+        const adapter = await initializeBrokerAdapter(connection, config);
+        const balance = await adapter.getAccountBalance();
+        
+        // Update last sync time
+        await updateBrokerConnection(input.connectionId, { lastSyncAt: new Date() });
+        
+        return balance;
+      }),
+
+    // Get positions
+    getPositions: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        const config = {
+          alpaca: process.env.ALPACA_CLIENT_ID ? {
+            clientId: process.env.ALPACA_CLIENT_ID,
+            clientSecret: process.env.ALPACA_CLIENT_SECRET!,
+            redirectUri: process.env.ALPACA_REDIRECT_URI || ''
+          } : undefined,
+          ibkr: process.env.IBKR_CONSUMER_KEY ? {
+            consumerKey: process.env.IBKR_CONSUMER_KEY,
+            privateKey: process.env.IBKR_PRIVATE_KEY!,
+            realm: process.env.IBKR_REALM || 'limited_poa',
+            redirectUri: process.env.IBKR_REDIRECT_URI || ''
+          } : undefined
+        };
+        
+        const adapter = await initializeBrokerAdapter(connection, config);
+        const positions = await adapter.getPositions();
+        
+        // Sync positions to database
+        await syncBrokerPositions(
+          input.connectionId,
+          String(ctx.user.id),
+          positions.map(pos => ({
+            symbol: pos.symbol,
+            quantity: pos.quantity,
+            side: pos.side as 'long' | 'short',
+            avgEntryPrice: pos.avgEntryPrice,
+            marketValue: pos.marketValue,
+            costBasis: pos.costBasis,
+            unrealizedPL: pos.unrealizedPL,
+            unrealizedPLPercent: pos.unrealizedPLPercent,
+            currentPrice: pos.currentPrice
+          }))
+        );
+        
+        return positions;
+      }),
+
+    // Place order
+    placeOrder: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        symbol: z.string(),
+        side: z.enum(['buy', 'sell']),
+        orderType: z.enum(['market', 'limit', 'stop', 'stop_limit', 'trailing_stop']),
+        quantity: z.number().positive(),
+        price: z.number().optional(),
+        stopPrice: z.number().optional(),
+        trailPercent: z.number().optional(),
+        timeInForce: z.enum(['day', 'gtc', 'ioc', 'fok']).default('day'),
+        extendedHours: z.boolean().default(false)
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        const config = {
+          alpaca: process.env.ALPACA_CLIENT_ID ? {
+            clientId: process.env.ALPACA_CLIENT_ID,
+            clientSecret: process.env.ALPACA_CLIENT_SECRET!,
+            redirectUri: process.env.ALPACA_REDIRECT_URI || ''
+          } : undefined,
+          ibkr: process.env.IBKR_CONSUMER_KEY ? {
+            consumerKey: process.env.IBKR_CONSUMER_KEY,
+            privateKey: process.env.IBKR_PRIVATE_KEY!,
+            realm: process.env.IBKR_REALM || 'limited_poa',
+            redirectUri: process.env.IBKR_REDIRECT_URI || ''
+          } : undefined
+        };
+        
+        const adapter = await initializeBrokerAdapter(connection, config);
+        
+        // Create order in database first
+        const dbOrder = await createBrokerOrder(
+          input.connectionId,
+          String(ctx.user.id),
+          {
+            symbol: input.symbol,
+            side: input.side === 'buy' ? OrderSide.BUY : OrderSide.SELL,
+            orderType: input.orderType.toUpperCase() as OrderType,
+            timeInForce: input.timeInForce.toUpperCase() as TimeInForce,
+            quantity: input.quantity,
+            price: input.price,
+            stopPrice: input.stopPrice,
+            trailPercent: input.trailPercent,
+            extendedHours: input.extendedHours
+          }
+        );
+        
+        try {
+          // Place order with broker
+          const orderResponse = await adapter.placeOrder({
+            symbol: input.symbol,
+            side: input.side === 'buy' ? OrderSide.BUY : OrderSide.SELL,
+            type: input.orderType.toUpperCase() as OrderType,
+            timeInForce: input.timeInForce.toUpperCase() as TimeInForce,
+            quantity: input.quantity,
+            price: input.price,
+            stopPrice: input.stopPrice,
+            trailPercent: input.trailPercent,
+            extendedHours: input.extendedHours,
+            clientOrderId: dbOrder.clientOrderId || undefined
+          });
+          
+          // Update order with broker response
+          await updateBrokerOrder(dbOrder.id, {
+            brokerOrderId: orderResponse.id,
+            status: orderResponse.status
+          });
+          
+          return {
+            success: true,
+            orderId: dbOrder.id,
+            brokerOrderId: orderResponse.id,
+            status: orderResponse.status
+          };
+        } catch (error) {
+          // Update order as rejected
+          await updateBrokerOrder(dbOrder.id, {
+            status: 'rejected' as any
+          });
+          
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: error instanceof Error ? error.message : 'Failed to place order'
+          });
+        }
+      }),
+
+    // Cancel order
+    cancelOrder: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        orderId: z.string()
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        const order = await getBrokerOrder(input.orderId);
+        
+        if (!order || order.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Order not found'
+          });
+        }
+        
+        const config = {
+          alpaca: process.env.ALPACA_CLIENT_ID ? {
+            clientId: process.env.ALPACA_CLIENT_ID,
+            clientSecret: process.env.ALPACA_CLIENT_SECRET!,
+            redirectUri: process.env.ALPACA_REDIRECT_URI || ''
+          } : undefined,
+          ibkr: process.env.IBKR_CONSUMER_KEY ? {
+            consumerKey: process.env.IBKR_CONSUMER_KEY,
+            privateKey: process.env.IBKR_PRIVATE_KEY!,
+            realm: process.env.IBKR_REALM || 'limited_poa',
+            redirectUri: process.env.IBKR_REDIRECT_URI || ''
+          } : undefined
+        };
+        
+        const adapter = await initializeBrokerAdapter(connection, config);
+        
+        await adapter.cancelOrder(order.brokerOrderId || input.orderId);
+        
+        await updateBrokerOrder(input.orderId, {
+          status: 'cancelled' as any,
+          cancelledAt: new Date()
+        });
+        
+        return { success: true };
+      }),
+
+    // Get orders
+    getOrders: protectedProcedure
+      .input(z.object({
+        connectionId: z.string().optional(),
+        limit: z.number().default(50)
+      }))
+      .query(async ({ ctx, input }) => {
+        return getUserBrokerOrders(String(ctx.user.id), input.connectionId, input.limit);
+      }),
+
+    // Get cached positions from database
+    getCachedPositions: protectedProcedure
+      .input(z.object({ connectionId: z.string().optional() }))
+      .query(async ({ ctx, input }) => {
+        return getUserBrokerPositions(String(ctx.user.id), input.connectionId);
+      }),
+
+    // Test broker connection
+    testBrokerConnection: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        const config = {
+          alpaca: process.env.ALPACA_CLIENT_ID ? {
+            clientId: process.env.ALPACA_CLIENT_ID,
+            clientSecret: process.env.ALPACA_CLIENT_SECRET!,
+            redirectUri: process.env.ALPACA_REDIRECT_URI || ''
+          } : undefined,
+          ibkr: process.env.IBKR_CONSUMER_KEY ? {
+            consumerKey: process.env.IBKR_CONSUMER_KEY,
+            privateKey: process.env.IBKR_PRIVATE_KEY!,
+            realm: process.env.IBKR_REALM || 'limited_poa',
+            redirectUri: process.env.IBKR_REDIRECT_URI || ''
+          } : undefined
+        };
+        
+        try {
+          const adapter = await initializeBrokerAdapter(connection, config);
+          const isConnected = await adapter.testConnection();
+          
+          if (isConnected) {
+          await updateBrokerConnection(input.connectionId, {
+            connectionError: null
+          });
+          }
+          
+          return { connected: isConnected };
+        } catch (error) {
+          await updateBrokerConnection(input.connectionId, {
+            connectionError: error instanceof Error ? error.message : 'Connection test failed'
+          });
+          
+          return { connected: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
       }),
   }),
 });
