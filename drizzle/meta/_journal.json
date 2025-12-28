@@ -22,6 +22,20 @@
       "when": 1766885445087,
       "tag": "0002_natural_unicorn",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1766886106570,
+      "tag": "0003_icy_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1766886153388,
+      "tag": "0004_daffy_beast",
+      "breakpoints": true
     }
   ]
 }

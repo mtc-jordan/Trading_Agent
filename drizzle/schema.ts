@@ -366,3 +366,91 @@ export const llmProviderConfigs = {
 } as const;
 
 export type LlmProvider = keyof typeof llmProviderConfigs;
+
+
+/**
+ * LLM Usage Logs - detailed tracking of every LLM API call
+ * Used for billing, analytics, and cost estimation
+ */
+export const llmUsageLogs = mysqlTable("llm_usage_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  // Provider and model info
+  provider: mysqlEnum("provider", ["openai", "deepseek", "claude", "gemini"]).notNull(),
+  model: varchar("model", { length: 100 }).notNull(),
+  // Token usage
+  promptTokens: int("promptTokens").notNull(),
+  completionTokens: int("completionTokens").notNull(),
+  totalTokens: int("totalTokens").notNull(),
+  // Cost calculation (in USD cents for precision)
+  costCents: int("costCents").notNull(),
+  // Context
+  analysisType: mysqlEnum("analysisType", ["technical", "fundamental", "sentiment", "risk", "microstructure", "macro", "quant", "consensus"]),
+  symbol: varchar("symbol", { length: 20 }),
+  // Fallback tracking
+  wasFallback: boolean("wasFallback").default(false).notNull(),
+  originalProvider: mysqlEnum("originalProvider", ["openai", "deepseek", "claude", "gemini"]),
+  fallbackReason: varchar("fallbackReason", { length: 255 }),
+  // Response info
+  responseTimeMs: int("responseTimeMs"),
+  success: boolean("success").default(true).notNull(),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type LlmUsageLog = typeof llmUsageLogs.$inferSelect;
+export type InsertLlmUsageLog = typeof llmUsageLogs.$inferInsert;
+
+/**
+ * User Fallback Settings - configures fallback provider preferences
+ */
+export const userFallbackSettings = mysqlTable("user_fallback_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  // Fallback enabled
+  fallbackEnabled: boolean("fallbackEnabled").default(true).notNull(),
+  // Priority order (JSON array of provider names) - no default, set in application
+  fallbackPriority: json("fallbackPriority"),
+  // Retry settings
+  maxRetries: int("maxRetries").default(2),
+  retryDelayMs: int("retryDelayMs").default(1000),
+  // Notifications
+  notifyOnFallback: boolean("notifyOnFallback").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserFallbackSettings = typeof userFallbackSettings.$inferSelect;
+export type InsertUserFallbackSettings = typeof userFallbackSettings.$inferInsert;
+
+/**
+ * LLM Provider pricing - cost per 1M tokens for each model
+ * Prices in USD cents for precision
+ */
+export const llmPricing = {
+  openai: {
+    "gpt-4-turbo": { input: 1000, output: 3000 }, // $10/$30 per 1M tokens
+    "gpt-4o": { input: 250, output: 1000 }, // $2.50/$10 per 1M tokens
+    "gpt-4o-mini": { input: 15, output: 60 }, // $0.15/$0.60 per 1M tokens
+    "o1-preview": { input: 1500, output: 6000 }, // $15/$60 per 1M tokens
+    "o1-mini": { input: 300, output: 1200 }, // $3/$12 per 1M tokens
+  },
+  deepseek: {
+    "deepseek-reasoner": { input: 55, output: 219 }, // $0.55/$2.19 per 1M tokens
+    "deepseek-chat": { input: 14, output: 28 }, // $0.14/$0.28 per 1M tokens
+    "deepseek-coder": { input: 14, output: 28 },
+  },
+  claude: {
+    "claude-sonnet-4-20250514": { input: 300, output: 1500 }, // $3/$15 per 1M tokens
+    "claude-3-5-sonnet": { input: 300, output: 1500 },
+    "claude-3-opus": { input: 1500, output: 7500 }, // $15/$75 per 1M tokens
+    "claude-3-haiku": { input: 25, output: 125 }, // $0.25/$1.25 per 1M tokens
+  },
+  gemini: {
+    "gemini-2.0-flash": { input: 10, output: 40 }, // $0.10/$0.40 per 1M tokens
+    "gemini-1.5-pro": { input: 125, output: 500 }, // $1.25/$5 per 1M tokens
+    "gemini-1.5-flash": { input: 8, output: 30 }, // $0.075/$0.30 per 1M tokens
+  },
+} as const;
+
+// LlmProvider type is already defined above from llmProviderConfigs

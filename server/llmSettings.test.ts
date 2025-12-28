@@ -13,7 +13,8 @@ vi.mock("./db", () => ({
 vi.mock("./services/llmProvider", () => ({
   encryptApiKey: vi.fn((key: string) => `encrypted_${key}`),
   decryptApiKey: vi.fn((key: string) => key.replace("encrypted_", "")),
-  validateApiKey: vi.fn().mockResolvedValue(true),
+  validateApiKey: vi.fn().mockResolvedValue({ valid: true, responseTimeMs: 150, modelsTested: ["gpt-4-turbo"] }),
+  validateApiKeyFormat: vi.fn().mockReturnValue({ valid: true }),
   getAvailableModels: vi.fn((provider: string) => [
     { id: `${provider}-model-1`, name: "Model 1", description: "Test model" },
   ]),
@@ -281,7 +282,7 @@ describe("llmSettings router", () => {
         openaiApiKey: "encrypted_sk-test",
       });
       (llmProvider.decryptApiKey as ReturnType<typeof vi.fn>).mockReturnValue("sk-test");
-      (llmProvider.validateApiKey as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      (llmProvider.validateApiKey as ReturnType<typeof vi.fn>).mockResolvedValue({ valid: true, responseTimeMs: 150, modelsTested: ["gpt-4-turbo"] });
 
       const ctx = createAuthContext();
       const caller = appRouter.createCaller(ctx);

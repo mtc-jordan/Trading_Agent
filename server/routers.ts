@@ -9,9 +9,15 @@ import { runAgentConsensus, getAvailableAgents } from "./services/aiAgents";
 import { 
   encryptApiKey, 
   decryptApiKey, 
-  validateApiKey, 
+  validateApiKey,
+  validateApiKeyFormat,
   getAvailableModels, 
   providerMetadata,
+  llmPricing,
+  calculateCost,
+  estimateCost,
+  formatCost,
+  formatTokens,
   LlmProvider 
 } from "./services/llmProvider";
 import { runBacktest, BacktestConfig } from "./services/backtesting";
@@ -750,7 +756,7 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    // Test API key connection
+    // Test API key connection with detailed feedback
     testConnection: protectedProcedure
       .input(z.object({
         provider: z.enum(["openai", "deepseek", "claude", "gemini"]),
@@ -775,17 +781,155 @@ export const appRouter = router({
         }
 
         const apiKey = decryptApiKey(encryptedKey);
-        const isValid = await validateApiKey(input.provider, apiKey);
+        const result = await validateApiKey(input.provider, apiKey);
 
-        if (!isValid) {
+        if (!result.valid) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `Connection test failed for ${input.provider}. The API key may be invalid or expired.`,
+            message: result.error || `Connection test failed for ${input.provider}.`,
           });
         }
 
-        return { success: true, message: `Successfully connected to ${input.provider}` };
+        return { 
+          success: true, 
+          message: `Successfully connected to ${input.provider}`,
+          responseTimeMs: result.responseTimeMs,
+          modelsTested: result.modelsTested,
+        };
       }),
+
+    // Validate API key format (quick check without API call)
+    validateKeyFormat: publicProcedure
+      .input(z.object({
+        provider: z.enum(["openai", "deepseek", "claude", "gemini"]),
+        apiKey: z.string(),
+      }))
+      .query(({ input }) => {
+        return validateApiKeyFormat(input.provider, input.apiKey);
+      }),
+
+    // Get pricing information for all providers
+    getPricing: publicProcedure.query(() => {
+      return llmPricing;
+    }),
+
+    // Estimate cost for an analysis
+    estimateCost: protectedProcedure
+      .input(z.object({
+        provider: z.enum(["openai", "deepseek", "claude", "gemini"]),
+        model: z.string(),
+        inputLength: z.number(),
+        estimatedOutputTokens: z.number().default(1000),
+      }))
+      .query(({ input }) => {
+        const estimate = estimateCost(
+          input.provider,
+          input.model,
+          "x".repeat(input.inputLength),
+          input.estimatedOutputTokens
+        );
+        return {
+          ...estimate,
+          formattedCost: formatCost(estimate.estimatedCostCents),
+        };
+      }),
+
+    // Get usage statistics
+    getUsageStats: protectedProcedure
+      .input(z.object({
+        days: z.number().min(1).max(365).default(30),
+      }))
+      .query(async ({ ctx, input }) => {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - input.days);
+        
+        const stats = await db.getUserUsageStats(ctx.user.id, startDate);
+        
+        return {
+          ...stats,
+          formattedTotalCost: formatCost(stats.totalCostCents),
+          formattedTotalTokens: formatTokens(stats.totalTokens),
+        };
+      }),
+
+    // Get recent usage summary
+    getUsageSummary: protectedProcedure.query(async ({ ctx }) => {
+      const summary = await db.getRecentUsageSummary(ctx.user.id, 30);
+      return {
+        ...summary,
+        formattedTotalCost: formatCost(summary.totalCostCents),
+        formattedDailyAvgCost: formatCost(summary.dailyAvgCostCents),
+        formattedTotalTokens: formatTokens(summary.totalTokens),
+      };
+    }),
+
+    // Get usage logs
+    getUsageLogs: protectedProcedure
+      .input(z.object({
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      }))
+      .query(async ({ ctx, input }) => {
+        const logs = await db.getUserLlmUsageLogs(ctx.user.id, {
+          limit: input.limit,
+          offset: input.offset,
+        });
+        
+        return logs.map(log => ({
+          ...log,
+          formattedCost: formatCost(log.costCents),
+          formattedTokens: formatTokens(log.totalTokens),
+        }));
+      }),
+
+    // Get fallback settings
+    getFallbackSettings: protectedProcedure.query(async ({ ctx }) => {
+      const settings = await db.getUserFallbackSettings(ctx.user.id);
+      if (!settings) {
+        return {
+          fallbackEnabled: true,
+          fallbackPriority: ["openai", "claude", "deepseek", "gemini"],
+          maxRetries: 2,
+          retryDelayMs: 1000,
+          notifyOnFallback: true,
+        };
+      }
+      return {
+        fallbackEnabled: settings.fallbackEnabled,
+        fallbackPriority: settings.fallbackPriority as string[] || ["openai", "claude", "deepseek", "gemini"],
+        maxRetries: settings.maxRetries || 2,
+        retryDelayMs: settings.retryDelayMs || 1000,
+        notifyOnFallback: settings.notifyOnFallback,
+      };
+    }),
+
+    // Update fallback settings
+    updateFallbackSettings: protectedProcedure
+      .input(z.object({
+        fallbackEnabled: z.boolean().optional(),
+        fallbackPriority: z.array(z.enum(["openai", "deepseek", "claude", "gemini"])).optional(),
+        maxRetries: z.number().min(0).max(5).optional(),
+        retryDelayMs: z.number().min(0).max(10000).optional(),
+        notifyOnFallback: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertUserFallbackSettings(ctx.user.id, input);
+        return { success: true };
+      }),
+
+    // Get configured providers (which have API keys)
+    getConfiguredProviders: protectedProcedure.query(async ({ ctx }) => {
+      const settings = await db.getUserLlmSettings(ctx.user.id);
+      if (!settings) return [];
+      
+      const configured: LlmProvider[] = [];
+      if (settings.openaiApiKey) configured.push("openai");
+      if (settings.deepseekApiKey) configured.push("deepseek");
+      if (settings.claudeApiKey) configured.push("claude");
+      if (settings.geminiApiKey) configured.push("gemini");
+      
+      return configured;
+    }),
   }),
 
   // ==================== ADMIN ROUTES ====================

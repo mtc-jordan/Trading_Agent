@@ -101,4 +101,32 @@
 - [x] Add model selection dropdown in settings
 - [x] Add API key validation before saving
 - [x] Test LLM integration with all providers (72 tests passing)
-- [ ] Push updates to GitHub
+- [x] Push updates to GitHub
+
+## Phase 11: Advanced LLM Features
+### Usage Billing & Cost Tracking
+- [x] Create usage_logs table for detailed token tracking
+- [x] Implement token counting for each LLM call
+- [x] Add cost calculation per provider/model
+- [x] Create usage statistics API endpoints
+- [x] Build usage dashboard in Settings UI
+- [x] Add daily/weekly/monthly usage charts
+- [x] Implement usage alerts and limits
+
+### API Key Validation & Test Connection
+- [x] Add real-time API key format validation
+- [x] Implement "Test Connection" button for each provider
+- [x] Show success checkmark or error message feedback
+- [x] Add loading state during validation
+- [x] Display model availability after successful connection
+
+### Provider Fallback Mechanism
+- [x] Create fallback priority configuration
+- [x] Implement automatic retry with fallback provider
+- [x] Add rate limit detection and handling
+- [x] Log fallback events for transparency
+- [x] Allow users to configure fallback preferences
+- [x] Add notification when fallback is triggered
+
+### Testing
+- [x] All 105 unit tests passing

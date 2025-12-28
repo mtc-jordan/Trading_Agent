@@ -12,7 +12,9 @@ import {
   botCopies, InsertBotCopy,
   watchlists, InsertWatchlist,
   subscriptionTierLimits, SubscriptionTier,
-  userLlmSettings, InsertUserLlmSettings, UserLlmSettings
+  userLlmSettings, InsertUserLlmSettings, UserLlmSettings,
+  llmUsageLogs, InsertLlmUsageLog, LlmUsageLog,
+  userFallbackSettings, InsertUserFallbackSettings, UserFallbackSettings
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -596,4 +598,282 @@ export async function deleteUserLlmSettings(userId: number): Promise<void> {
   
   await db.delete(userLlmSettings)
     .where(eq(userLlmSettings.userId, userId));
+}
+
+
+// ==================== LLM USAGE LOGGING OPERATIONS ====================
+
+export async function logLlmUsage(data: InsertLlmUsageLog): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(llmUsageLogs).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserLlmUsageLogs(
+  userId: number, 
+  options?: { 
+    limit?: number; 
+    offset?: number; 
+    startDate?: Date; 
+    endDate?: Date;
+    provider?: string;
+  }
+): Promise<LlmUsageLog[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  let query = db.select().from(llmUsageLogs)
+    .where(eq(llmUsageLogs.userId, userId))
+    .orderBy(desc(llmUsageLogs.createdAt));
+  
+  if (options?.limit) {
+    query = query.limit(options.limit) as typeof query;
+  }
+  if (options?.offset) {
+    query = query.offset(options.offset) as typeof query;
+  }
+  
+  return query;
+}
+
+export async function getUserUsageStats(
+  userId: number,
+  startDate?: Date,
+  endDate?: Date
+): Promise<{
+  totalTokens: number;
+  totalCostCents: number;
+  callCount: number;
+  avgResponseTimeMs: number;
+  successRate: number;
+  fallbackRate: number;
+  byProvider: Record<string, { tokens: number; costCents: number; calls: number }>;
+  byDay: { date: string; tokens: number; costCents: number; calls: number }[];
+}> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      totalTokens: 0,
+      totalCostCents: 0,
+      callCount: 0,
+      avgResponseTimeMs: 0,
+      successRate: 100,
+      fallbackRate: 0,
+      byProvider: {},
+      byDay: [],
+    };
+  }
+  
+  // Get all logs for the user within date range
+  const conditions = [eq(llmUsageLogs.userId, userId)];
+  if (startDate) {
+    conditions.push(gte(llmUsageLogs.createdAt, startDate));
+  }
+  if (endDate) {
+    conditions.push(lte(llmUsageLogs.createdAt, endDate));
+  }
+  
+  const logs = await db.select().from(llmUsageLogs)
+    .where(and(...conditions))
+    .orderBy(desc(llmUsageLogs.createdAt));
+  
+  // Calculate stats
+  let totalTokens = 0;
+  let totalCostCents = 0;
+  let totalResponseTime = 0;
+  let successCount = 0;
+  let fallbackCount = 0;
+  const byProvider: Record<string, { tokens: number; costCents: number; calls: number }> = {};
+  const byDayMap: Record<string, { tokens: number; costCents: number; calls: number }> = {};
+  
+  for (const log of logs) {
+    totalTokens += log.totalTokens;
+    totalCostCents += log.costCents;
+    totalResponseTime += log.responseTimeMs || 0;
+    if (log.success) successCount++;
+    if (log.wasFallback) fallbackCount++;
+    
+    // By provider
+    if (!byProvider[log.provider]) {
+      byProvider[log.provider] = { tokens: 0, costCents: 0, calls: 0 };
+    }
+    byProvider[log.provider].tokens += log.totalTokens;
+    byProvider[log.provider].costCents += log.costCents;
+    byProvider[log.provider].calls++;
+    
+    // By day
+    const dateKey = log.createdAt.toISOString().split('T')[0];
+    if (!byDayMap[dateKey]) {
+      byDayMap[dateKey] = { tokens: 0, costCents: 0, calls: 0 };
+    }
+    byDayMap[dateKey].tokens += log.totalTokens;
+    byDayMap[dateKey].costCents += log.costCents;
+    byDayMap[dateKey].calls++;
+  }
+  
+  const callCount = logs.length;
+  
+  return {
+    totalTokens,
+    totalCostCents,
+    callCount,
+    avgResponseTimeMs: callCount > 0 ? Math.round(totalResponseTime / callCount) : 0,
+    successRate: callCount > 0 ? Math.round((successCount / callCount) * 100) : 100,
+    fallbackRate: callCount > 0 ? Math.round((fallbackCount / callCount) * 100) : 0,
+    byProvider,
+    byDay: Object.entries(byDayMap)
+      .map(([date, stats]) => ({ date, ...stats }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+  };
+}
+
+export async function getRecentUsageSummary(userId: number, days: number = 30): Promise<{
+  totalCostCents: number;
+  totalTokens: number;
+  callCount: number;
+  topProvider: string | null;
+  dailyAvgCostCents: number;
+}> {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  
+  const stats = await getUserUsageStats(userId, startDate);
+  
+  // Find top provider
+  let topProvider: string | null = null;
+  let maxCalls = 0;
+  for (const [provider, data] of Object.entries(stats.byProvider)) {
+    if (data.calls > maxCalls) {
+      maxCalls = data.calls;
+      topProvider = provider;
+    }
+  }
+  
+  return {
+    totalCostCents: stats.totalCostCents,
+    totalTokens: stats.totalTokens,
+    callCount: stats.callCount,
+    topProvider,
+    dailyAvgCostCents: days > 0 ? Math.round(stats.totalCostCents / days) : 0,
+  };
+}
+
+// ==================== USER FALLBACK SETTINGS OPERATIONS ====================
+
+export async function getUserFallbackSettings(userId: number): Promise<UserFallbackSettings | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(userFallbackSettings)
+    .where(eq(userFallbackSettings.userId, userId))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createUserFallbackSettings(data: InsertUserFallbackSettings): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(userFallbackSettings).values(data);
+  return result[0].insertId;
+}
+
+export async function updateUserFallbackSettings(
+  userId: number,
+  data: Partial<Omit<InsertUserFallbackSettings, 'userId'>>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  
+  await db.update(userFallbackSettings)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(userFallbackSettings.userId, userId));
+}
+
+export async function upsertUserFallbackSettings(
+  userId: number,
+  data: Partial<Omit<InsertUserFallbackSettings, 'userId'>>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const existing = await getUserFallbackSettings(userId);
+  
+  if (existing) {
+    await updateUserFallbackSettings(userId, data);
+  } else {
+    // Set default fallback priority if not provided
+    const defaultPriority = ["openai", "claude", "deepseek", "gemini"];
+    await createUserFallbackSettings({ 
+      userId, 
+      fallbackPriority: data.fallbackPriority || defaultPriority,
+      ...data 
+    } as InsertUserFallbackSettings);
+  }
+}
+
+// ==================== ADMIN LLM USAGE STATS ====================
+
+export async function getAdminLlmUsageStats(): Promise<{
+  totalCostCents: number;
+  totalTokens: number;
+  totalCalls: number;
+  byProvider: Record<string, { tokens: number; costCents: number; calls: number }>;
+  topUsers: { userId: number; costCents: number; calls: number }[];
+}> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      totalCostCents: 0,
+      totalTokens: 0,
+      totalCalls: 0,
+      byProvider: {},
+      topUsers: [],
+    };
+  }
+  
+  // Get all logs
+  const logs = await db.select().from(llmUsageLogs);
+  
+  let totalCostCents = 0;
+  let totalTokens = 0;
+  const byProvider: Record<string, { tokens: number; costCents: number; calls: number }> = {};
+  const byUser: Record<number, { costCents: number; calls: number }> = {};
+  
+  for (const log of logs) {
+    totalCostCents += log.costCents;
+    totalTokens += log.totalTokens;
+    
+    // By provider
+    if (!byProvider[log.provider]) {
+      byProvider[log.provider] = { tokens: 0, costCents: 0, calls: 0 };
+    }
+    byProvider[log.provider].tokens += log.totalTokens;
+    byProvider[log.provider].costCents += log.costCents;
+    byProvider[log.provider].calls++;
+    
+    // By user
+    if (!byUser[log.userId]) {
+      byUser[log.userId] = { costCents: 0, calls: 0 };
+    }
+    byUser[log.userId].costCents += log.costCents;
+    byUser[log.userId].calls++;
+  }
+  
+  // Get top 10 users by cost
+  const topUsers = Object.entries(byUser)
+    .map(([userId, stats]) => ({ userId: parseInt(userId), ...stats }))
+    .sort((a, b) => b.costCents - a.costCents)
+    .slice(0, 10);
+  
+  return {
+    totalCostCents,
+    totalTokens,
+    totalCalls: logs.length,
+    byProvider,
+    topUsers,
+  };
 }

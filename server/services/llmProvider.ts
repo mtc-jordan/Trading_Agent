@@ -1,6 +1,10 @@
 /**
  * Multi-Provider LLM Service
- * Supports OpenAI, DeepSeek R1, Claude, and Gemini with user-configurable settings
+ * Supports OpenAI, DeepSeek R1, Claude, and Gemini with:
+ * - User-configurable settings
+ * - Usage tracking and cost estimation
+ * - Automatic provider fallback
+ * - Real-time API key validation
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
@@ -12,6 +16,7 @@ const IV_LENGTH = 16;
 
 // Types
 export type LlmProvider = "openai" | "deepseek" | "claude" | "gemini";
+export type AnalysisType = "technical" | "fundamental" | "sentiment" | "risk" | "microstructure" | "macro" | "quant" | "consensus";
 
 export interface LlmMessage {
   role: "system" | "user" | "assistant";
@@ -28,13 +33,93 @@ export interface LlmConfig {
 
 export interface LlmResponse {
   content: string;
-  usage?: {
+  usage: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
   model: string;
   provider: LlmProvider;
+  costCents: number;
+  responseTimeMs: number;
+  wasFallback?: boolean;
+  originalProvider?: LlmProvider;
+  fallbackReason?: string;
+}
+
+export interface UsageStats {
+  totalTokens: number;
+  totalCostCents: number;
+  callCount: number;
+  avgResponseTimeMs: number;
+  byProvider: Record<LlmProvider, { tokens: number; costCents: number; calls: number }>;
+  byDay: { date: string; tokens: number; costCents: number }[];
+}
+
+export interface FallbackConfig {
+  enabled: boolean;
+  priority: LlmProvider[];
+  maxRetries: number;
+  retryDelayMs: number;
+  notifyOnFallback: boolean;
+}
+
+// LLM Provider pricing - cost per 1M tokens in USD cents
+export const llmPricing: Record<string, Record<string, { input: number; output: number }>> = {
+  openai: {
+    "gpt-4-turbo": { input: 1000, output: 3000 },
+    "gpt-4o": { input: 250, output: 1000 },
+    "gpt-4o-mini": { input: 15, output: 60 },
+    "o1-preview": { input: 1500, output: 6000 },
+    "o1-mini": { input: 300, output: 1200 },
+  },
+  deepseek: {
+    "deepseek-reasoner": { input: 55, output: 219 },
+    "deepseek-chat": { input: 14, output: 28 },
+    "deepseek-coder": { input: 14, output: 28 },
+  },
+  claude: {
+    "claude-sonnet-4-20250514": { input: 300, output: 1500 },
+    "claude-3-5-sonnet-20241022": { input: 300, output: 1500 },
+    "claude-3-5-haiku-20241022": { input: 100, output: 500 },
+    "claude-3-opus-20240229": { input: 1500, output: 7500 },
+  },
+  gemini: {
+    "gemini-2.0-flash": { input: 10, output: 40 },
+    "gemini-1.5-pro": { input: 125, output: 500 },
+    "gemini-1.5-flash": { input: 8, output: 30 },
+  },
+};
+
+// Calculate cost in cents
+export function calculateCost(
+  provider: LlmProvider,
+  model: string,
+  promptTokens: number,
+  completionTokens: number
+): number {
+  const pricing = llmPricing[provider]?.[model];
+  if (!pricing) {
+    // Default pricing if model not found
+    return Math.ceil((promptTokens * 100 + completionTokens * 300) / 1000000);
+  }
+  
+  const inputCost = (promptTokens * pricing.input) / 1000000;
+  const outputCost = (completionTokens * pricing.output) / 1000000;
+  return Math.ceil(inputCost + outputCost);
+}
+
+// Estimate cost before making a call (rough estimate based on input length)
+export function estimateCost(
+  provider: LlmProvider,
+  model: string,
+  inputText: string,
+  estimatedOutputTokens: number = 1000
+): { estimatedCostCents: number; estimatedInputTokens: number } {
+  // Rough token estimation: ~4 characters per token
+  const estimatedInputTokens = Math.ceil(inputText.length / 4);
+  const costCents = calculateCost(provider, model, estimatedInputTokens, estimatedOutputTokens);
+  return { estimatedCostCents: costCents, estimatedInputTokens };
 }
 
 // Encryption utilities
@@ -60,8 +145,28 @@ export function decryptApiKey(encryptedKey: string): string {
   }
 }
 
+// Rate limit detection
+function isRateLimitError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return message.includes("rate limit") || 
+         message.includes("429") || 
+         message.includes("too many requests") ||
+         message.includes("quota exceeded");
+}
+
+// Provider unavailable detection
+function isProviderUnavailable(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return message.includes("503") || 
+         message.includes("502") || 
+         message.includes("500") ||
+         message.includes("service unavailable") ||
+         message.includes("internal server error") ||
+         message.includes("timeout");
+}
+
 // Provider-specific API calls
-async function callOpenAI(messages: LlmMessage[], config: LlmConfig): Promise<LlmResponse> {
+async function callOpenAI(messages: LlmMessage[], config: LlmConfig): Promise<Omit<LlmResponse, 'costCents' | 'responseTimeMs'>> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -78,7 +183,7 @@ async function callOpenAI(messages: LlmMessage[], config: LlmConfig): Promise<Ll
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`OpenAI API error: ${error}`);
+    throw new Error(`OpenAI API error (${response.status}): ${error}`);
   }
 
   const data = await response.json();
@@ -94,7 +199,7 @@ async function callOpenAI(messages: LlmMessage[], config: LlmConfig): Promise<Ll
   };
 }
 
-async function callDeepSeek(messages: LlmMessage[], config: LlmConfig): Promise<LlmResponse> {
+async function callDeepSeek(messages: LlmMessage[], config: LlmConfig): Promise<Omit<LlmResponse, 'costCents' | 'responseTimeMs'>> {
   const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -111,7 +216,7 @@ async function callDeepSeek(messages: LlmMessage[], config: LlmConfig): Promise<
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`DeepSeek API error: ${error}`);
+    throw new Error(`DeepSeek API error (${response.status}): ${error}`);
   }
 
   const data = await response.json();
@@ -127,8 +232,7 @@ async function callDeepSeek(messages: LlmMessage[], config: LlmConfig): Promise<
   };
 }
 
-async function callClaude(messages: LlmMessage[], config: LlmConfig): Promise<LlmResponse> {
-  // Extract system message
+async function callClaude(messages: LlmMessage[], config: LlmConfig): Promise<Omit<LlmResponse, 'costCents' | 'responseTimeMs'>> {
   const systemMessage = messages.find(m => m.role === "system")?.content || "";
   const chatMessages = messages.filter(m => m.role !== "system");
 
@@ -152,7 +256,7 @@ async function callClaude(messages: LlmMessage[], config: LlmConfig): Promise<Ll
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Claude API error: ${error}`);
+    throw new Error(`Claude API error (${response.status}): ${error}`);
   }
 
   const data = await response.json();
@@ -168,8 +272,7 @@ async function callClaude(messages: LlmMessage[], config: LlmConfig): Promise<Ll
   };
 }
 
-async function callGemini(messages: LlmMessage[], config: LlmConfig): Promise<LlmResponse> {
-  // Convert messages to Gemini format
+async function callGemini(messages: LlmMessage[], config: LlmConfig): Promise<Omit<LlmResponse, 'costCents' | 'responseTimeMs'>> {
   const systemInstruction = messages.find(m => m.role === "system")?.content || "";
   const contents = messages
     .filter(m => m.role !== "system")
@@ -198,7 +301,7 @@ async function callGemini(messages: LlmMessage[], config: LlmConfig): Promise<Ll
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Gemini API error: ${error}`);
+    throw new Error(`Gemini API error (${response.status}): ${error}`);
   }
 
   const data = await response.json();
@@ -214,27 +317,130 @@ async function callGemini(messages: LlmMessage[], config: LlmConfig): Promise<Ll
   };
 }
 
-// Main LLM invocation function
-export async function invokeLlm(
+// Call provider with timing
+async function callProvider(
   messages: LlmMessage[],
   config: LlmConfig
 ): Promise<LlmResponse> {
+  const startTime = Date.now();
+  
+  let result: Omit<LlmResponse, 'costCents' | 'responseTimeMs'>;
+  
   switch (config.provider) {
     case "openai":
-      return callOpenAI(messages, config);
+      result = await callOpenAI(messages, config);
+      break;
     case "deepseek":
-      return callDeepSeek(messages, config);
+      result = await callDeepSeek(messages, config);
+      break;
     case "claude":
-      return callClaude(messages, config);
+      result = await callClaude(messages, config);
+      break;
     case "gemini":
-      return callGemini(messages, config);
+      result = await callGemini(messages, config);
+      break;
     default:
       throw new Error(`Unsupported LLM provider: ${config.provider}`);
   }
+  
+  const responseTimeMs = Date.now() - startTime;
+  const costCents = calculateCost(
+    config.provider,
+    config.model,
+    result.usage.promptTokens,
+    result.usage.completionTokens
+  );
+  
+  return {
+    ...result,
+    costCents,
+    responseTimeMs,
+  };
 }
 
-// Validate API key by making a simple request
-export async function validateApiKey(provider: LlmProvider, apiKey: string): Promise<boolean> {
+// Main LLM invocation function with fallback support
+export async function invokeLlm(
+  messages: LlmMessage[],
+  config: LlmConfig,
+  fallbackConfig?: FallbackConfig,
+  availableKeys?: Record<LlmProvider, string | null>
+): Promise<LlmResponse> {
+  const originalProvider = config.provider;
+  let lastError: Error | null = null;
+  
+  // Try primary provider first
+  try {
+    return await callProvider(messages, config);
+  } catch (error) {
+    lastError = error as Error;
+    
+    // If fallback is disabled or not configured, throw immediately
+    if (!fallbackConfig?.enabled || !availableKeys) {
+      throw error;
+    }
+    
+    // Check if error is recoverable via fallback
+    const shouldFallback = isRateLimitError(lastError) || isProviderUnavailable(lastError);
+    if (!shouldFallback) {
+      throw error;
+    }
+  }
+  
+  // Try fallback providers
+  const fallbackProviders = fallbackConfig.priority.filter(
+    p => p !== originalProvider && availableKeys[p]
+  );
+  
+  for (let retry = 0; retry < fallbackConfig.maxRetries && retry < fallbackProviders.length; retry++) {
+    const fallbackProvider = fallbackProviders[retry];
+    const fallbackKey = availableKeys[fallbackProvider];
+    
+    if (!fallbackKey) continue;
+    
+    // Wait before retry
+    if (fallbackConfig.retryDelayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, fallbackConfig.retryDelayMs));
+    }
+    
+    try {
+      const fallbackModel = getDefaultModel(fallbackProvider);
+      const result = await callProvider(messages, {
+        ...config,
+        provider: fallbackProvider,
+        apiKey: fallbackKey,
+        model: fallbackModel,
+      });
+      
+      return {
+        ...result,
+        wasFallback: true,
+        originalProvider,
+        fallbackReason: lastError?.message || "Primary provider failed",
+      };
+    } catch (error) {
+      lastError = error as Error;
+      continue;
+    }
+  }
+  
+  // All providers failed
+  throw new Error(`All LLM providers failed. Last error: ${lastError?.message}`);
+}
+
+// Validate API key with detailed feedback
+export interface ValidationResult {
+  valid: boolean;
+  error?: string;
+  responseTimeMs?: number;
+  modelsTested?: string[];
+}
+
+export async function validateApiKey(
+  provider: LlmProvider,
+  apiKey: string
+): Promise<ValidationResult> {
+  const startTime = Date.now();
+  
   try {
     const testMessages: LlmMessage[] = [
       { role: "user", content: "Say 'OK' if you can hear me." }
@@ -247,11 +453,69 @@ export async function validateApiKey(provider: LlmProvider, apiKey: string): Pro
       maxTokens: 10,
     };
 
-    await invokeLlm(testMessages, config);
-    return true;
-  } catch {
-    return false;
+    await callProvider(testMessages, config);
+    
+    return {
+      valid: true,
+      responseTimeMs: Date.now() - startTime,
+      modelsTested: [config.model],
+    };
+  } catch (error) {
+    const err = error as Error;
+    let errorMessage = err.message;
+    
+    // Parse common error types for better feedback
+    if (errorMessage.includes("401") || errorMessage.includes("invalid_api_key")) {
+      errorMessage = "Invalid API key. Please check your key and try again.";
+    } else if (errorMessage.includes("403")) {
+      errorMessage = "API key does not have permission. Check your account settings.";
+    } else if (errorMessage.includes("429")) {
+      errorMessage = "Rate limit exceeded. Your key is valid but temporarily blocked.";
+    } else if (errorMessage.includes("insufficient_quota")) {
+      errorMessage = "Insufficient quota. Please add credits to your account.";
+    }
+    
+    return {
+      valid: false,
+      error: errorMessage,
+      responseTimeMs: Date.now() - startTime,
+    };
   }
+}
+
+// Quick format validation (without API call)
+export function validateApiKeyFormat(provider: LlmProvider, apiKey: string): { valid: boolean; error?: string } {
+  if (!apiKey || apiKey.trim().length === 0) {
+    return { valid: false, error: "API key is required" };
+  }
+  
+  switch (provider) {
+    case "openai":
+      if (!apiKey.startsWith("sk-")) {
+        return { valid: false, error: "OpenAI API keys should start with 'sk-'" };
+      }
+      if (apiKey.length < 40) {
+        return { valid: false, error: "OpenAI API key seems too short" };
+      }
+      break;
+    case "deepseek":
+      if (apiKey.length < 20) {
+        return { valid: false, error: "DeepSeek API key seems too short" };
+      }
+      break;
+    case "claude":
+      if (!apiKey.startsWith("sk-ant-")) {
+        return { valid: false, error: "Anthropic API keys should start with 'sk-ant-'" };
+      }
+      break;
+    case "gemini":
+      if (apiKey.length < 30) {
+        return { valid: false, error: "Gemini API key seems too short" };
+      }
+      break;
+  }
+  
+  return { valid: true };
 }
 
 // Get default model for provider
@@ -271,7 +535,7 @@ export function getDefaultModel(provider: LlmProvider): string {
 }
 
 // Get available models for provider
-export function getAvailableModels(provider: LlmProvider): { id: string; name: string; description: string }[] {
+export function getAvailableModels(provider: LlmProvider): { id: string; name: string; description: string; costPer1MTokens?: { input: number; output: number } }[] {
   const models: Record<LlmProvider, { id: string; name: string; description: string }[]> = {
     openai: [
       { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: "Most capable model, best for complex analysis" },
@@ -298,29 +562,55 @@ export function getAvailableModels(provider: LlmProvider): { id: string; name: s
     ],
   };
 
-  return models[provider] || [];
+  return (models[provider] || []).map(model => ({
+    ...model,
+    costPer1MTokens: llmPricing[provider]?.[model.id],
+  }));
 }
 
 // Provider metadata
-export const providerMetadata: Record<LlmProvider, { name: string; description: string; website: string }> = {
+export const providerMetadata: Record<LlmProvider, { name: string; description: string; website: string; icon: string }> = {
   openai: {
     name: "OpenAI",
     description: "Industry-leading AI models including GPT-4 and O1 series",
     website: "https://platform.openai.com/api-keys",
+    icon: "🤖",
   },
   deepseek: {
     name: "DeepSeek",
     description: "Advanced reasoning AI with DeepSeek R1 chain-of-thought",
     website: "https://platform.deepseek.com/api_keys",
+    icon: "🔮",
   },
   claude: {
     name: "Anthropic Claude",
     description: "Safe and helpful AI assistant with strong reasoning",
     website: "https://console.anthropic.com/settings/keys",
+    icon: "🧠",
   },
   gemini: {
     name: "Google Gemini",
     description: "Google's multimodal AI with long context support",
     website: "https://aistudio.google.com/app/apikey",
+    icon: "✨",
   },
 };
+
+// Format cost for display
+export function formatCost(costCents: number): string {
+  if (costCents < 1) {
+    return "< $0.01";
+  }
+  return `$${(costCents / 100).toFixed(2)}`;
+}
+
+// Format tokens for display
+export function formatTokens(tokens: number): string {
+  if (tokens >= 1000000) {
+    return `${(tokens / 1000000).toFixed(2)}M`;
+  }
+  if (tokens >= 1000) {
+    return `${(tokens / 1000).toFixed(1)}K`;
+  }
+  return tokens.toString();
+}
