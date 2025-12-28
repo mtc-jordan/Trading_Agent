@@ -5,7 +5,15 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "./db";
-import { runAgentConsensus, getAvailableAgents, AgentType } from "./services/aiAgents";
+import { runAgentConsensus, getAvailableAgents } from "./services/aiAgents";
+import { 
+  encryptApiKey, 
+  decryptApiKey, 
+  validateApiKey, 
+  getAvailableModels, 
+  providerMetadata,
+  LlmProvider 
+} from "./services/llmProvider";
 import { runBacktest, BacktestConfig } from "./services/backtesting";
 import { callDataApi } from "./_core/dataApi";
 import { createCheckoutSession, createCustomerPortalSession } from "./stripe/checkout";
@@ -205,11 +213,12 @@ export const appRouter = router({
     analyze: protectedProcedure
       .input(z.object({ symbol: z.string() }))
       .mutation(async ({ ctx, input }) => {
-        // Get available agents based on subscription tier
-        const availableAgents = getAvailableAgents(ctx.user.subscriptionTier);
-        
-        // Run consensus analysis
-        const result = await runAgentConsensus(input.symbol, availableAgents);
+        // Run consensus analysis with user's LLM configuration
+        const result = await runAgentConsensus(
+          ctx.user.id,
+          input.symbol,
+          ctx.user.subscriptionTier
+        );
         
         // Save analysis to database
         await db.createAgentAnalysis({
@@ -603,6 +612,180 @@ export const appRouter = router({
         ...SUBSCRIPTION_TIERS[tier as SubscriptionTier],
       };
     }),
+  }),
+
+  // ==================== LLM SETTINGS ROUTES ====================
+  llmSettings: router({
+    // Get available providers and models
+    getProviders: publicProcedure.query(() => {
+      return Object.entries(providerMetadata).map(([id, meta]) => ({
+        id: id as LlmProvider,
+        name: meta.name,
+        description: meta.description,
+        website: meta.website,
+        models: getAvailableModels(id as LlmProvider),
+      }));
+    }),
+
+    // Get user's current LLM settings
+    getSettings: protectedProcedure.query(async ({ ctx }) => {
+      const settings = await db.getUserLlmSettings(ctx.user.id);
+      if (!settings) {
+        return {
+          activeProvider: "openai" as LlmProvider,
+          hasOpenaiKey: false,
+          hasDeepseekKey: false,
+          hasClaudeKey: false,
+          hasGeminiKey: false,
+          openaiModel: "gpt-4-turbo",
+          deepseekModel: "deepseek-reasoner",
+          claudeModel: "claude-sonnet-4-20250514",
+          geminiModel: "gemini-2.0-flash",
+          temperature: 0.7,
+          maxTokens: 4096,
+          totalTokensUsed: 0,
+        };
+      }
+
+      return {
+        activeProvider: settings.activeProvider as LlmProvider,
+        hasOpenaiKey: !!settings.openaiApiKey,
+        hasDeepseekKey: !!settings.deepseekApiKey,
+        hasClaudeKey: !!settings.claudeApiKey,
+        hasGeminiKey: !!settings.geminiApiKey,
+        openaiModel: settings.openaiModel || "gpt-4-turbo",
+        deepseekModel: settings.deepseekModel || "deepseek-reasoner",
+        claudeModel: settings.claudeModel || "claude-sonnet-4-20250514",
+        geminiModel: settings.geminiModel || "gemini-2.0-flash",
+        temperature: parseFloat(settings.temperature || "0.7"),
+        maxTokens: settings.maxTokens || 4096,
+        totalTokensUsed: settings.totalTokensUsed || 0,
+        lastUsedAt: settings.lastUsedAt,
+      };
+    }),
+
+    // Update active provider
+    setActiveProvider: protectedProcedure
+      .input(z.object({
+        provider: z.enum(["openai", "deepseek", "claude", "gemini"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertUserLlmSettings(ctx.user.id, {
+          activeProvider: input.provider,
+        });
+        return { success: true };
+      }),
+
+    // Save API key for a provider
+    saveApiKey: protectedProcedure
+      .input(z.object({
+        provider: z.enum(["openai", "deepseek", "claude", "gemini"]),
+        apiKey: z.string().min(1),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Validate the API key first
+        const isValid = await validateApiKey(input.provider, input.apiKey);
+        if (!isValid) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Invalid ${input.provider} API key. Please check and try again.`,
+          });
+        }
+
+        // Encrypt and save the key
+        const encryptedKey = encryptApiKey(input.apiKey);
+        const keyField = `${input.provider}ApiKey` as const;
+        
+        await db.upsertUserLlmSettings(ctx.user.id, {
+          [keyField]: encryptedKey,
+          activeProvider: input.provider,
+        });
+
+        return { success: true, message: `${input.provider} API key saved successfully` };
+      }),
+
+    // Remove API key for a provider
+    removeApiKey: protectedProcedure
+      .input(z.object({
+        provider: z.enum(["openai", "deepseek", "claude", "gemini"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const keyField = `${input.provider}ApiKey` as const;
+        
+        await db.upsertUserLlmSettings(ctx.user.id, {
+          [keyField]: null,
+        });
+
+        return { success: true };
+      }),
+
+    // Update model selection for a provider
+    setModel: protectedProcedure
+      .input(z.object({
+        provider: z.enum(["openai", "deepseek", "claude", "gemini"]),
+        model: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const modelField = `${input.provider}Model` as const;
+        
+        await db.upsertUserLlmSettings(ctx.user.id, {
+          [modelField]: input.model,
+        });
+
+        return { success: true };
+      }),
+
+    // Update general settings (temperature, max tokens)
+    updateSettings: protectedProcedure
+      .input(z.object({
+        temperature: z.number().min(0).max(2).optional(),
+        maxTokens: z.number().min(100).max(128000).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertUserLlmSettings(ctx.user.id, {
+          temperature: input.temperature?.toString(),
+          maxTokens: input.maxTokens,
+        });
+
+        return { success: true };
+      }),
+
+    // Test API key connection
+    testConnection: protectedProcedure
+      .input(z.object({
+        provider: z.enum(["openai", "deepseek", "claude", "gemini"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const settings = await db.getUserLlmSettings(ctx.user.id);
+        if (!settings) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "No LLM settings found. Please save an API key first.",
+          });
+        }
+
+        const keyField = `${input.provider}ApiKey` as keyof typeof settings;
+        const encryptedKey = settings[keyField] as string | null;
+        
+        if (!encryptedKey) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: `No API key found for ${input.provider}. Please save one first.`,
+          });
+        }
+
+        const apiKey = decryptApiKey(encryptedKey);
+        const isValid = await validateApiKey(input.provider, apiKey);
+
+        if (!isValid) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Connection test failed for ${input.provider}. The API key may be invalid or expired.`,
+          });
+        }
+
+        return { success: true, message: `Successfully connected to ${input.provider}` };
+      }),
   }),
 
   // ==================== ADMIN ROUTES ====================

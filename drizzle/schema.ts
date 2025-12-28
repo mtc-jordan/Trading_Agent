@@ -286,3 +286,83 @@ export const subscriptionTierLimits = {
 } as const;
 
 export type SubscriptionTier = keyof typeof subscriptionTierLimits;
+
+
+/**
+ * User LLM Settings - stores user's preferred LLM provider and API keys
+ * API keys are encrypted before storage
+ */
+export const userLlmSettings = mysqlTable("user_llm_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  // Provider selection
+  activeProvider: mysqlEnum("activeProvider", ["openai", "deepseek", "claude", "gemini"]).default("openai").notNull(),
+  // API Keys (encrypted)
+  openaiApiKey: text("openaiApiKey"),
+  deepseekApiKey: text("deepseekApiKey"),
+  claudeApiKey: text("claudeApiKey"),
+  geminiApiKey: text("geminiApiKey"),
+  // Model preferences
+  openaiModel: varchar("openaiModel", { length: 100 }).default("gpt-4-turbo"),
+  deepseekModel: varchar("deepseekModel", { length: 100 }).default("deepseek-reasoner"),
+  claudeModel: varchar("claudeModel", { length: 100 }).default("claude-sonnet-4-20250514"),
+  geminiModel: varchar("geminiModel", { length: 100 }).default("gemini-2.0-flash"),
+  // Settings
+  temperature: decimal("temperature", { precision: 3, scale: 2 }).default("0.7"),
+  maxTokens: int("maxTokens").default(4096),
+  // Usage tracking
+  totalTokensUsed: int("totalTokensUsed").default(0),
+  lastUsedAt: timestamp("lastUsedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserLlmSettings = typeof userLlmSettings.$inferSelect;
+export type InsertUserLlmSettings = typeof userLlmSettings.$inferInsert;
+
+/**
+ * LLM Provider configurations - available models for each provider
+ */
+export const llmProviderConfigs = {
+  openai: {
+    name: "OpenAI",
+    models: [
+      { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: "Most capable model, best for complex analysis" },
+      { id: "gpt-4o", name: "GPT-4o", description: "Optimized for speed and quality balance" },
+      { id: "gpt-4o-mini", name: "GPT-4o Mini", description: "Fast and cost-effective" },
+      { id: "o1-preview", name: "O1 Preview", description: "Advanced reasoning capabilities" },
+      { id: "o1-mini", name: "O1 Mini", description: "Fast reasoning model" },
+    ],
+    baseUrl: "https://api.openai.com/v1",
+  },
+  deepseek: {
+    name: "DeepSeek",
+    models: [
+      { id: "deepseek-reasoner", name: "DeepSeek R1", description: "Advanced reasoning with chain-of-thought" },
+      { id: "deepseek-chat", name: "DeepSeek Chat", description: "General purpose chat model" },
+      { id: "deepseek-coder", name: "DeepSeek Coder", description: "Specialized for code analysis" },
+    ],
+    baseUrl: "https://api.deepseek.com/v1",
+  },
+  claude: {
+    name: "Anthropic Claude",
+    models: [
+      { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", description: "Best balance of speed and intelligence" },
+      { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", description: "Previous generation, very capable" },
+      { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", description: "Fast and efficient" },
+      { id: "claude-3-opus-20240229", name: "Claude 3 Opus", description: "Most powerful for complex tasks" },
+    ],
+    baseUrl: "https://api.anthropic.com/v1",
+  },
+  gemini: {
+    name: "Google Gemini",
+    models: [
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", description: "Latest fast model with multimodal" },
+      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", description: "Advanced reasoning and long context" },
+      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", description: "Fast and efficient" },
+    ],
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+  },
+} as const;
+
+export type LlmProvider = keyof typeof llmProviderConfigs;

@@ -13,6 +13,7 @@ import Portfolio from "./pages/Portfolio";
 import Marketplace from "./pages/Marketplace";
 import Admin from "./pages/Admin";
 import Pricing from "./pages/Pricing";
+import Settings from "./pages/Settings";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/portfolio" component={Portfolio} />
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/admin" component={Admin} />
+      <Route path="/settings" component={Settings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

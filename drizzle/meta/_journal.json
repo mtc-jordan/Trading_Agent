@@ -15,6 +15,13 @@
       "when": 1766881552349,
       "tag": "0001_curvy_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1766885445087,
+      "tag": "0002_natural_unicorn",
+      "breakpoints": true
     }
   ]
 }

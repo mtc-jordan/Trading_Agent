@@ -11,7 +11,8 @@ import {
   marketplaceListings, InsertMarketplaceListing,
   botCopies, InsertBotCopy,
   watchlists, InsertWatchlist,
-  subscriptionTierLimits, SubscriptionTier
+  subscriptionTierLimits, SubscriptionTier,
+  userLlmSettings, InsertUserLlmSettings, UserLlmSettings
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -520,4 +521,79 @@ export async function getAdminStats() {
     totalBacktests: backtestCount?.count || 0,
     usersByTier: tierCounts,
   };
+}
+
+
+// ==================== USER LLM SETTINGS OPERATIONS ====================
+
+export async function getUserLlmSettings(userId: number): Promise<UserLlmSettings | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(userLlmSettings)
+    .where(eq(userLlmSettings.userId, userId))
+    .limit(1);
+  
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createUserLlmSettings(data: InsertUserLlmSettings): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(userLlmSettings).values(data);
+  return result[0].insertId;
+}
+
+export async function updateUserLlmSettings(
+  userId: number, 
+  data: Partial<Omit<InsertUserLlmSettings, 'userId'>>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  
+  await db.update(userLlmSettings)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(userLlmSettings.userId, userId));
+}
+
+export async function upsertUserLlmSettings(
+  userId: number,
+  data: Partial<Omit<InsertUserLlmSettings, 'userId'>>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const existing = await getUserLlmSettings(userId);
+  
+  if (existing) {
+    await updateUserLlmSettings(userId, data);
+  } else {
+    await createUserLlmSettings({ userId, ...data } as InsertUserLlmSettings);
+  }
+}
+
+export async function updateLlmUsage(userId: number, tokensUsed: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  
+  const existing = await getUserLlmSettings(userId);
+  
+  if (existing) {
+    await db.update(userLlmSettings)
+      .set({ 
+        totalTokensUsed: (existing.totalTokensUsed || 0) + tokensUsed,
+        lastUsedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(userLlmSettings.userId, userId));
+  }
+}
+
+export async function deleteUserLlmSettings(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  
+  await db.delete(userLlmSettings)
+    .where(eq(userLlmSettings.userId, userId));
 }
