@@ -15,6 +15,13 @@
       "when": 1766905045891,
       "tag": "0001_mighty_dust",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1766907201892,
+      "tag": "0002_mute_shriek",
+      "breakpoints": true
     }
   ]
 }

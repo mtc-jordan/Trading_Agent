@@ -798,3 +798,32 @@
 - [x] Position sync status component (PositionSyncStatus.tsx)
 - [x] Brokers tab in Settings page
 - [x] Tests for all new features (513 tests passing)
+
+
+## Phase 44: Order History, Analytics & Portfolio Rebalancing
+- [ ] Order execution history database schema
+- [ ] Order history API with filtering and pagination
+- [ ] Order history page UI with status tracking
+- [ ] P&L calculations for executed orders
+- [ ] Broker account analytics service
+- [ ] Account performance metrics API
+- [ ] Broker analytics dashboard UI
+- [ ] Buying power utilization charts
+- [ ] Margin usage tracking
+- [ ] Trade frequency analysis
+- [ ] Portfolio rebalancing engine
+- [ ] Target allocation configuration
+- [ ] Rebalancing suggestions algorithm
+- [ ] Multi-broker trade execution for rebalancing
+- [ ] Rebalancing UI with trade preview
+- [ ] Tests for all new features
+
+
+## Phase 44: Order History, Analytics & Rebalancing
+- [x] Order execution history database schema (order_executions, broker_account_snapshots, portfolio_allocations, rebalancing_history, broker_performance_metrics tables)
+- [x] Order history page with filtering and P&L calculations
+- [x] Broker account analytics service with aggregated metrics
+- [x] Broker analytics dashboard with performance metrics
+- [x] Portfolio rebalancing engine with drift calculations
+- [x] Rebalancing UI with trade suggestions
+- [x] Tests for all new features (554 tests passing)

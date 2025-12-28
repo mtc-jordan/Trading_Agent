@@ -4214,6 +4214,281 @@ export const appRouter = router({
         
         return { success: true };
       }),
+
+    // ==================== ORDER HISTORY ====================
+    
+    // Get order execution history
+    getOrderHistory: protectedProcedure
+      .input(z.object({
+        connectionId: z.string().optional(),
+        symbol: z.string().optional(),
+        side: z.enum(['buy', 'sell']).optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        isClosingTrade: z.boolean().optional(),
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getOrderHistory } = await import('./services/orderHistory');
+        return getOrderHistory({
+          userId: String(ctx.user.id),
+          connectionId: input.connectionId,
+          symbol: input.symbol,
+          side: input.side,
+          startDate: input.startDate ? new Date(input.startDate) : undefined,
+          endDate: input.endDate ? new Date(input.endDate) : undefined,
+          isClosingTrade: input.isClosingTrade,
+          limit: input.limit,
+          offset: input.offset,
+        });
+      }),
+
+    // Get P&L summary
+    getPnLSummary: protectedProcedure
+      .input(z.object({
+        connectionId: z.string().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getPnLSummary } = await import('./services/orderHistory');
+        return getPnLSummary(
+          String(ctx.user.id),
+          input.connectionId,
+          input.startDate ? new Date(input.startDate) : undefined,
+          input.endDate ? new Date(input.endDate) : undefined
+        );
+      }),
+
+    // Get symbol P&L breakdown
+    getSymbolPnLBreakdown: protectedProcedure
+      .input(z.object({
+        connectionId: z.string().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getSymbolPnLBreakdown } = await import('./services/orderHistory');
+        return getSymbolPnLBreakdown(
+          String(ctx.user.id),
+          input.connectionId,
+          input.startDate ? new Date(input.startDate) : undefined,
+          input.endDate ? new Date(input.endDate) : undefined
+        );
+      }),
+
+    // Get daily P&L for charting
+    getDailyPnL: protectedProcedure
+      .input(z.object({
+        connectionId: z.string().optional(),
+        days: z.number().min(1).max(365).default(30),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getDailyPnL } = await import('./services/orderHistory');
+        return getDailyPnL(String(ctx.user.id), input.connectionId, input.days);
+      }),
+
+    // ==================== BROKER ANALYTICS ====================
+    
+    // Record account snapshot
+    recordSnapshot: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        equity: z.number(),
+        cash: z.number(),
+        buyingPower: z.number(),
+        portfolioValue: z.number(),
+        marginUsed: z.number().optional(),
+        marginAvailable: z.number().optional(),
+        dayPL: z.number().optional(),
+        totalPL: z.number().optional(),
+        positionsCount: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Connection not found' });
+        }
+        
+        const { recordAccountSnapshot } = await import('./services/brokerAnalytics');
+        return recordAccountSnapshot({
+          ...input,
+          userId: String(ctx.user.id),
+        });
+      }),
+
+    // Get account snapshots
+    getAccountSnapshots: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        days: z.number().min(1).max(365).default(30),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getAccountSnapshots } = await import('./services/brokerAnalytics');
+        return getAccountSnapshots(input.connectionId, String(ctx.user.id), input.days);
+      }),
+
+    // Get latest snapshot
+    getLatestSnapshot: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const { getLatestSnapshot } = await import('./services/brokerAnalytics');
+        return getLatestSnapshot(input.connectionId, String(ctx.user.id));
+      }),
+
+    // Calculate performance metrics
+    calculateMetrics: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        periodType: z.enum(['daily', 'weekly', 'monthly', 'yearly', 'all_time']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Connection not found' });
+        }
+        
+        const { calculatePerformanceMetrics } = await import('./services/brokerAnalytics');
+        return calculatePerformanceMetrics(input.connectionId, String(ctx.user.id), input.periodType);
+      }),
+
+    // Get performance metrics
+    getPerformanceMetrics: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        periodType: z.enum(['daily', 'weekly', 'monthly', 'yearly', 'all_time']).optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getPerformanceMetrics } = await import('./services/brokerAnalytics');
+        return getPerformanceMetrics(input.connectionId, String(ctx.user.id), input.periodType);
+      }),
+
+    // Get aggregated analytics
+    getAggregatedAnalytics: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getAggregatedAnalytics } = await import('./services/brokerAnalytics');
+        return getAggregatedAnalytics(String(ctx.user.id));
+      }),
+
+    // Get buying power history
+    getBuyingPowerHistory: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        days: z.number().min(1).max(365).default(30),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getBuyingPowerHistory } = await import('./services/brokerAnalytics');
+        return getBuyingPowerHistory(input.connectionId, String(ctx.user.id), input.days);
+      }),
+
+    // Get trade frequency analysis
+    getTradeFrequency: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        days: z.number().min(1).max(365).default(30),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getTradeFrequency } = await import('./services/brokerAnalytics');
+        return getTradeFrequency(input.connectionId, String(ctx.user.id), input.days);
+      }),
+
+    // ==================== PORTFOLIO REBALANCING ====================
+    
+    // Create allocation
+    createAllocation: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(100),
+        description: z.string().max(500).optional(),
+        targetAllocations: z.array(z.object({
+          symbol: z.string(),
+          targetPercent: z.number().min(0).max(100),
+        })),
+        rebalanceThreshold: z.number().min(1).max(50).default(5),
+        rebalanceFrequency: z.enum(['manual', 'daily', 'weekly', 'monthly', 'quarterly']).default('manual'),
+        preferredBrokers: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { createAllocation } = await import('./services/portfolioRebalancing');
+        return createAllocation({
+          userId: String(ctx.user.id),
+          ...input,
+        });
+      }),
+
+    // Update allocation
+    updateAllocation: protectedProcedure
+      .input(z.object({
+        allocationId: z.string(),
+        name: z.string().min(1).max(100).optional(),
+        description: z.string().max(500).optional(),
+        targetAllocations: z.array(z.object({
+          symbol: z.string(),
+          targetPercent: z.number().min(0).max(100),
+        })).optional(),
+        rebalanceThreshold: z.number().min(1).max(50).optional(),
+        rebalanceFrequency: z.enum(['manual', 'daily', 'weekly', 'monthly', 'quarterly']).optional(),
+        preferredBrokers: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { updateAllocation } = await import('./services/portfolioRebalancing');
+        const { allocationId, ...updates } = input;
+        return updateAllocation(allocationId, String(ctx.user.id), updates);
+      }),
+
+    // Get allocation
+    getAllocation: protectedProcedure
+      .input(z.object({ allocationId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const { getAllocation } = await import('./services/portfolioRebalancing');
+        return getAllocation(input.allocationId, String(ctx.user.id));
+      }),
+
+    // Get user allocations
+    getUserAllocations: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getUserAllocations } = await import('./services/portfolioRebalancing');
+        return getUserAllocations(String(ctx.user.id));
+      }),
+
+    // Delete allocation
+    deleteAllocation: protectedProcedure
+      .input(z.object({ allocationId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const { deleteAllocation } = await import('./services/portfolioRebalancing');
+        await deleteAllocation(input.allocationId, String(ctx.user.id));
+        return { success: true };
+      }),
+
+    // Calculate rebalancing suggestions
+    getRebalanceSuggestions: protectedProcedure
+      .input(z.object({ allocationId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        const { calculateRebalanceSuggestions } = await import('./services/portfolioRebalancing');
+        return calculateRebalanceSuggestions(input.allocationId, String(ctx.user.id));
+      }),
+
+    // Execute rebalancing
+    executeRebalancing: protectedProcedure
+      .input(z.object({
+        allocationId: z.string(),
+        tradesToExecute: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { executeRebalancing } = await import('./services/portfolioRebalancing');
+        return executeRebalancing(input.allocationId, String(ctx.user.id), input.tradesToExecute);
+      }),
+
+    // Get rebalancing history
+    getRebalancingHistory: protectedProcedure
+      .input(z.object({
+        allocationId: z.string().optional(),
+        limit: z.number().min(1).max(100).default(20),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getRebalancingHistory } = await import('./services/portfolioRebalancing');
+        return getRebalancingHistory(String(ctx.user.id), input.allocationId, input.limit);
+      }),
   }),
 });
 

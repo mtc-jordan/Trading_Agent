@@ -37,6 +37,9 @@ import CopyTrading from "./pages/CopyTrading";
 import TradingJournal from "./pages/TradingJournal";
 import ExchangeConnections from "./pages/ExchangeConnections";
 import BrokerConnections from "./pages/BrokerConnections";
+import OrderHistory from "./pages/OrderHistory";
+import BrokerAnalytics from "./pages/BrokerAnalytics";
+import PortfolioRebalancing from "./pages/PortfolioRebalancing";
 
 function Router() {
   return (
@@ -73,6 +76,9 @@ function Router() {
       <Route path="/journal" component={TradingJournal} />
       <Route path="/exchanges" component={ExchangeConnections} />
       <Route path="/brokers" component={BrokerConnections} />
+      <Route path="/order-history" component={OrderHistory} />
+      <Route path="/broker-analytics" component={BrokerAnalytics} />
+      <Route path="/rebalancing" component={PortfolioRebalancing} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

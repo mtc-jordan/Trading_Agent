@@ -1900,3 +1900,205 @@ export const brokerPositions = mysqlTable("broker_positions", {
 
 export type BrokerPositionRecord = typeof brokerPositions.$inferSelect;
 export type InsertBrokerPosition = typeof brokerPositions.$inferInsert;
+
+
+/**
+ * Order Execution History
+ * Detailed tracking of all order executions with P&L calculations
+ */
+export const orderExecutions = mysqlTable("order_executions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  orderId: varchar("orderId", { length: 64 }).notNull(),
+  connectionId: varchar("connectionId", { length: 64 }).notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  
+  // Order details
+  symbol: varchar("symbol", { length: 32 }).notNull(),
+  side: mysqlEnum("side", ["buy", "sell"]).notNull(),
+  orderType: varchar("orderType", { length: 32 }).notNull(),
+  
+  // Execution details
+  executionId: varchar("executionId", { length: 128 }),
+  executedQuantity: decimal("executedQuantity", { precision: 18, scale: 8 }).notNull(),
+  executedPrice: decimal("executedPrice", { precision: 18, scale: 8 }).notNull(),
+  executionValue: decimal("executionValue", { precision: 18, scale: 2 }).notNull(),
+  
+  // Fees and costs
+  commission: decimal("commission", { precision: 18, scale: 4 }).default("0").notNull(),
+  fees: decimal("fees", { precision: 18, scale: 4 }).default("0").notNull(),
+  totalCost: decimal("totalCost", { precision: 18, scale: 2 }).notNull(),
+  
+  // P&L tracking (for closing trades)
+  isClosingTrade: boolean("isClosingTrade").default(false).notNull(),
+  openingExecutionId: varchar("openingExecutionId", { length: 64 }),
+  realizedPL: decimal("realizedPL", { precision: 18, scale: 2 }),
+  realizedPLPercent: decimal("realizedPLPercent", { precision: 8, scale: 4 }),
+  holdingPeriodDays: int("holdingPeriodDays"),
+  
+  // Market context at execution
+  marketPrice: decimal("marketPrice", { precision: 18, scale: 8 }),
+  slippage: decimal("slippage", { precision: 8, scale: 4 }),
+  
+  executedAt: timestamp("executedAt").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type OrderExecutionRecord = typeof orderExecutions.$inferSelect;
+export type InsertOrderExecution = typeof orderExecutions.$inferInsert;
+
+/**
+ * Broker Account Snapshots
+ * Daily snapshots of broker account metrics for analytics
+ */
+export const brokerAccountSnapshots = mysqlTable("broker_account_snapshots", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  connectionId: varchar("connectionId", { length: 64 }).notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  
+  // Account values
+  equity: decimal("equity", { precision: 18, scale: 2 }).notNull(),
+  cash: decimal("cash", { precision: 18, scale: 2 }).notNull(),
+  buyingPower: decimal("buyingPower", { precision: 18, scale: 2 }).notNull(),
+  portfolioValue: decimal("portfolioValue", { precision: 18, scale: 2 }).notNull(),
+  
+  // Margin metrics
+  marginUsed: decimal("marginUsed", { precision: 18, scale: 2 }).default("0").notNull(),
+  marginAvailable: decimal("marginAvailable", { precision: 18, scale: 2 }),
+  marginUtilization: decimal("marginUtilization", { precision: 8, scale: 4 }),
+  
+  // Performance metrics
+  dayPL: decimal("dayPL", { precision: 18, scale: 2 }).default("0").notNull(),
+  dayPLPercent: decimal("dayPLPercent", { precision: 8, scale: 4 }),
+  totalPL: decimal("totalPL", { precision: 18, scale: 2 }).default("0").notNull(),
+  totalPLPercent: decimal("totalPLPercent", { precision: 8, scale: 4 }),
+  
+  // Trading activity
+  tradesCount: int("tradesCount").default(0).notNull(),
+  winningTrades: int("winningTrades").default(0).notNull(),
+  losingTrades: int("losingTrades").default(0).notNull(),
+  tradingVolume: decimal("tradingVolume", { precision: 18, scale: 2 }).default("0").notNull(),
+  
+  // Position metrics
+  positionsCount: int("positionsCount").default(0).notNull(),
+  longPositions: int("longPositions").default(0).notNull(),
+  shortPositions: int("shortPositions").default(0).notNull(),
+  
+  snapshotDate: timestamp("snapshotDate").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BrokerAccountSnapshotRecord = typeof brokerAccountSnapshots.$inferSelect;
+export type InsertBrokerAccountSnapshot = typeof brokerAccountSnapshots.$inferInsert;
+
+/**
+ * Portfolio Allocations
+ * Target and actual allocations for portfolio rebalancing
+ */
+export const portfolioAllocations = mysqlTable("portfolio_allocations", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  
+  // Target allocations (JSON: { symbol: percentage })
+  targetAllocations: json("targetAllocations").notNull(),
+  
+  // Rebalancing settings
+  rebalanceThreshold: decimal("rebalanceThreshold", { precision: 5, scale: 2 }).default("5.00").notNull(), // % drift before rebalancing
+  rebalanceFrequency: mysqlEnum("rebalanceFrequency", ["manual", "daily", "weekly", "monthly", "quarterly"]).default("manual").notNull(),
+  lastRebalancedAt: timestamp("lastRebalancedAt"),
+  nextRebalanceAt: timestamp("nextRebalanceAt"),
+  
+  // Broker preferences for rebalancing
+  preferredBrokers: json("preferredBrokers"), // Array of connectionIds in priority order
+  
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PortfolioAllocationRecord = typeof portfolioAllocations.$inferSelect;
+export type InsertPortfolioAllocation = typeof portfolioAllocations.$inferInsert;
+
+/**
+ * Rebalancing History
+ * Track all rebalancing operations
+ */
+export const rebalancingHistory = mysqlTable("rebalancing_history", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  allocationId: varchar("allocationId", { length: 64 }).notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  
+  // Pre-rebalance state
+  preAllocations: json("preAllocations").notNull(), // { symbol: { actual: %, target: %, value: $ } }
+  totalPortfolioValue: decimal("totalPortfolioValue", { precision: 18, scale: 2 }).notNull(),
+  
+  // Trades executed
+  tradesExecuted: json("tradesExecuted").notNull(), // Array of trade details
+  tradesCount: int("tradesCount").default(0).notNull(),
+  totalTradingVolume: decimal("totalTradingVolume", { precision: 18, scale: 2 }).default("0").notNull(),
+  totalFees: decimal("totalFees", { precision: 18, scale: 4 }).default("0").notNull(),
+  
+  // Post-rebalance state
+  postAllocations: json("postAllocations").notNull(),
+  
+  // Status
+  status: mysqlEnum("status", ["pending", "in_progress", "completed", "partial", "failed", "cancelled"]).default("pending").notNull(),
+  errorMessage: text("errorMessage"),
+  
+  triggeredBy: mysqlEnum("triggeredBy", ["manual", "scheduled", "threshold"]).default("manual").notNull(),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type RebalancingHistoryRecord = typeof rebalancingHistory.$inferSelect;
+export type InsertRebalancingHistory = typeof rebalancingHistory.$inferInsert;
+
+/**
+ * Broker Performance Metrics
+ * Aggregated performance metrics per broker
+ */
+export const brokerPerformanceMetrics = mysqlTable("broker_performance_metrics", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  connectionId: varchar("connectionId", { length: 64 }).notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  
+  // Time period
+  periodType: mysqlEnum("periodType", ["daily", "weekly", "monthly", "yearly", "all_time"]).notNull(),
+  periodStart: timestamp("periodStart").notNull(),
+  periodEnd: timestamp("periodEnd").notNull(),
+  
+  // Returns
+  totalReturn: decimal("totalReturn", { precision: 18, scale: 2 }).default("0").notNull(),
+  totalReturnPercent: decimal("totalReturnPercent", { precision: 8, scale: 4 }),
+  
+  // Risk metrics
+  sharpeRatio: decimal("sharpeRatio", { precision: 8, scale: 4 }),
+  sortinoRatio: decimal("sortinoRatio", { precision: 8, scale: 4 }),
+  maxDrawdown: decimal("maxDrawdown", { precision: 8, scale: 4 }),
+  maxDrawdownDuration: int("maxDrawdownDuration"), // days
+  volatility: decimal("volatility", { precision: 8, scale: 4 }),
+  
+  // Trading stats
+  totalTrades: int("totalTrades").default(0).notNull(),
+  winningTrades: int("winningTrades").default(0).notNull(),
+  losingTrades: int("losingTrades").default(0).notNull(),
+  winRate: decimal("winRate", { precision: 5, scale: 2 }),
+  profitFactor: decimal("profitFactor", { precision: 8, scale: 4 }),
+  avgWin: decimal("avgWin", { precision: 18, scale: 2 }),
+  avgLoss: decimal("avgLoss", { precision: 18, scale: 2 }),
+  largestWin: decimal("largestWin", { precision: 18, scale: 2 }),
+  largestLoss: decimal("largestLoss", { precision: 18, scale: 2 }),
+  
+  // Volume and activity
+  totalVolume: decimal("totalVolume", { precision: 18, scale: 2 }).default("0").notNull(),
+  avgTradeSize: decimal("avgTradeSize", { precision: 18, scale: 2 }),
+  avgHoldingPeriod: decimal("avgHoldingPeriod", { precision: 8, scale: 2 }), // days
+  
+  calculatedAt: timestamp("calculatedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BrokerPerformanceMetricsRecord = typeof brokerPerformanceMetrics.$inferSelect;
+export type InsertBrokerPerformanceMetrics = typeof brokerPerformanceMetrics.$inferInsert;
