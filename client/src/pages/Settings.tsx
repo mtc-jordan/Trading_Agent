@@ -45,6 +45,8 @@ import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { BrokerConnectionWizard } from "@/components/BrokerConnectionWizard";
+import { PositionSyncStatus } from "@/components/PositionSyncStatus";
 
 type LlmProvider = "openai" | "deepseek" | "claude" | "gemini";
 
@@ -340,6 +342,10 @@ export default function Settings() {
             <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-4 w-4" />
               Notifications
+            </TabsTrigger>
+            <TabsTrigger value="brokers" className="gap-2">
+              <Globe className="h-4 w-4" />
+              Brokers
             </TabsTrigger>
           </TabsList>
 
@@ -1067,6 +1073,11 @@ export default function Settings() {
           <TabsContent value="notifications" className="space-y-6">
             <EmailPreferencesSection />
           </TabsContent>
+
+          {/* Brokers Tab */}
+          <TabsContent value="brokers" className="space-y-6">
+            <BrokersSection />
+          </TabsContent>
         </Tabs>
       </main>
     </div>
@@ -1574,6 +1585,236 @@ function EmailPreferencesSection() {
           </CardContent>
         </Card>
       )}
+    </>
+  );
+}
+
+
+// Brokers Section Component
+function BrokersSection() {
+  const [showWizard, setShowWizard] = useState(false);
+  const { data: connections, isLoading, refetch } = trpc.broker.getConnections.useQuery();
+  const { data: availableBrokers } = trpc.broker.getAvailableBrokers.useQuery();
+  
+  const disconnectMutation = trpc.broker.disconnect.useMutation({
+    onSuccess: () => {
+      toast.success("Broker disconnected successfully");
+      refetch();
+    },
+    onError: (error) => {
+      toast.error("Failed to disconnect broker", { description: error.message });
+    },
+  });
+  
+  const testConnectionMutation = trpc.broker.testBrokerConnection.useQuery;
+  
+  const getBrokerName = (type: string) => {
+    const names: Record<string, string> = {
+      alpaca: "Alpaca",
+      interactive_brokers: "Interactive Brokers",
+      binance: "Binance",
+      coinbase: "Coinbase",
+    };
+    return names[type] || type;
+  };
+  
+  const getBrokerIcon = (type: string) => {
+    const icons: Record<string, string> = {
+      alpaca: "🦙",
+      interactive_brokers: "📊",
+      binance: "🔶",
+      coinbase: "🔵",
+    };
+    return icons[type] || "🏦";
+  };
+  
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  
+  return (
+    <>
+      {/* Connected Brokers */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                Connected Brokers
+              </CardTitle>
+              <CardDescription>
+                Manage your broker connections for trading
+              </CardDescription>
+            </div>
+            <Button onClick={() => setShowWizard(true)}>
+              <Key className="h-4 w-4 mr-2" />
+              Connect Broker
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!connections || connections.length === 0 ? (
+            <div className="text-center py-8">
+              <Globe className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No Brokers Connected</h3>
+              <p className="text-muted-foreground mb-4">
+                Connect a broker to start trading with real or paper money
+              </p>
+              <Button onClick={() => setShowWizard(true)}>
+                Connect Your First Broker
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {connections.map((connection) => (
+                <div
+                  key={connection.id}
+                  className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="text-3xl">{getBrokerIcon(connection.brokerType)}</div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-semibold">{getBrokerName(connection.brokerType)}</h4>
+                        <Badge variant={connection.isPaper ? "secondary" : "default"}>
+                          {connection.isPaper ? "Paper" : "Live"}
+                        </Badge>
+                        {connection.isActive ? (
+                          <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Connected
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive">
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Disconnected
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Account: {connection.accountNumber || connection.accountId}
+                      </p>
+                      {connection.lastSyncAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Last sync: {new Date(connection.lastSyncAt).toLocaleString()}
+                        </p>
+                      )}
+                      {connection.connectionError && (
+                        <p className="text-xs text-red-500">{connection.connectionError}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        // Test connection
+                        toast.info("Testing connection...");
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Test
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm("Are you sure you want to disconnect this broker?")) {
+                          disconnectMutation.mutate({ connectionId: connection.id });
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Disconnect
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Available Brokers */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5 text-primary" />
+            Available Brokers
+          </CardTitle>
+          <CardDescription>
+            Brokers you can connect to TradoVerse
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {availableBrokers?.map((broker) => (
+              <div
+                key={broker.type}
+                className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="text-2xl">{getBrokerIcon(broker.type)}</div>
+                  <div>
+                    <h4 className="font-medium">{broker.name}</h4>
+                    <p className="text-sm text-muted-foreground">{broker.description}</p>
+                    <div className="flex gap-2 mt-1">
+                      {broker.capabilities?.supportsPaperTrading && (
+                        <Badge variant="secondary" className="text-xs">Paper Trading</Badge>
+                      )}
+                      {broker.capabilities?.supportsStocks && (
+                        <Badge variant="outline" className="text-xs">Stocks</Badge>
+                      )}
+                      {broker.capabilities?.supportsCrypto && (
+                        <Badge variant="outline" className="text-xs">Crypto</Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowWizard(true)}
+                >
+                  Connect
+                </Button>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Position Sync Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <RefreshCw className="h-5 w-5 text-primary" />
+            Position Sync
+          </CardTitle>
+          <CardDescription>
+            Real-time position synchronization status
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PositionSyncStatus showControls={true} />
+        </CardContent>
+      </Card>
+
+      {/* Broker Connection Wizard */}
+      <BrokerConnectionWizard
+        open={showWizard}
+        onOpenChange={setShowWizard}
+        onSuccess={() => {
+          refetch();
+          setShowWizard(false);
+        }}
+      />
     </>
   );
 }

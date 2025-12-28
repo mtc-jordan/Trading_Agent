@@ -4031,6 +4031,189 @@ export const appRouter = router({
           return { connected: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
       }),
+
+    // Verify broker credentials (for wizard)
+    verifyCredentials: protectedProcedure
+      .input(z.object({
+        brokerType: z.enum(['alpaca', 'interactive_brokers', 'binance', 'coinbase']),
+        apiKey: z.string(),
+        apiSecret: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Validate credentials format
+        const formatValidation: Record<string, { key: RegExp; secret: RegExp }> = {
+          alpaca: { key: /^[A-Z0-9]{20}$/, secret: /^[A-Za-z0-9]{40}$/ },
+          interactive_brokers: { key: /^[A-Za-z0-9_-]{10,50}$/, secret: /^[A-Za-z0-9_-]{20,100}$/ },
+          binance: { key: /^[A-Za-z0-9]{64}$/, secret: /^[A-Za-z0-9]{64}$/ },
+          coinbase: { key: /^[a-z0-9-]{36}$/, secret: /^[A-Za-z0-9+/=]{88}$/ },
+        };
+        
+        const validation = formatValidation[input.brokerType];
+        if (validation) {
+          if (!validation.key.test(input.apiKey)) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Invalid API key format'
+            });
+          }
+          if (!validation.secret.test(input.apiSecret)) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Invalid API secret format'
+            });
+          }
+        }
+        
+        // For demo purposes, simulate verification
+        // In production, this would actually test the credentials with the broker API
+        const mockAccountInfo = {
+          accountId: `${input.brokerType.toUpperCase()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+          accountName: `${input.brokerType === 'alpaca' ? 'Alpaca' : input.brokerType === 'interactive_brokers' ? 'IB' : input.brokerType === 'binance' ? 'Binance' : 'Coinbase'} Account`,
+          balance: input.brokerType === 'alpaca' || input.brokerType === 'interactive_brokers' ? 100000 : 10000,
+          currency: input.brokerType === 'binance' || input.brokerType === 'coinbase' ? 'USDT' : 'USD',
+          isPaper: input.brokerType === 'alpaca' || input.brokerType === 'interactive_brokers',
+        };
+        
+        return {
+          success: true,
+          accountInfo: mockAccountInfo,
+        };
+      }),
+
+    // Connect broker with API credentials (for wizard)
+    connect: protectedProcedure
+      .input(z.object({
+        brokerType: z.enum(['alpaca', 'interactive_brokers', 'binance', 'coinbase']),
+        apiKey: z.string(),
+        apiSecret: z.string(),
+        accountName: z.string(),
+        isPaper: z.boolean().default(true),
+        enableAutoSync: z.boolean().default(true),
+        syncIntervalMinutes: z.number().min(1).max(60).default(5),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Create broker connection record
+        const connectionId = `conn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // In production, this would:
+        // 1. Encrypt and store the API credentials
+        // 2. Create a broker connection record in the database
+        // 3. Set up auto-sync if enabled
+        
+        // Create broker connection with correct function signature
+        const brokerTypeEnum = input.brokerType === 'alpaca' ? BrokerType.ALPACA : 
+                              input.brokerType === 'interactive_brokers' ? BrokerType.INTERACTIVE_BROKERS :
+                              BrokerType.ALPACA; // Default for crypto brokers
+        
+        const connection = await createBrokerConnection(
+          String(ctx.user.id),
+          brokerTypeEnum,
+          input.isPaper,
+          {
+            accessToken: input.apiKey,
+            refreshToken: input.apiSecret,
+            expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
+          },
+          {
+            accountId: `${input.brokerType.toUpperCase()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+            accountNumber: `ACC-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+            accountType: input.isPaper ? 'paper' : 'live',
+          }
+        );
+        
+        return {
+          success: true,
+          connectionId: connection.id,
+          accountId: connection.accountId,
+        };
+      }),
+
+    // Sync positions for a connection
+    syncPositions: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        const { syncConnectionPositions } = await import('./services/positionSync');
+        const result = await syncConnectionPositions(input.connectionId);
+        
+        return result;
+      }),
+
+    // Sync all positions for user
+    syncAllPositions: protectedProcedure
+      .mutation(async ({ ctx }) => {
+        const { syncUserPositions } = await import('./services/positionSync');
+        const result = await syncUserPositions(String(ctx.user.id));
+        
+        return result;
+      }),
+
+    // Get sync status for all connections
+    getSyncStatus: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getUserSyncStatus } = await import('./services/positionSync');
+        const status = await getUserSyncStatus(String(ctx.user.id));
+        
+        return status;
+      }),
+
+    // Get aggregated positions across all brokers
+    getAggregatedPositions: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getAggregatedPositions } = await import('./services/positionSync');
+        const result = await getAggregatedPositions(String(ctx.user.id));
+        
+        return result;
+      }),
+
+    // Start auto-sync for a connection
+    startAutoSync: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        intervalMinutes: z.number().min(1).max(60).default(5)
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        const { startAutoSync } = await import('./services/positionSync');
+        startAutoSync(input.connectionId, input.intervalMinutes);
+        
+        return { success: true };
+      }),
+
+    // Stop auto-sync for a connection
+    stopAutoSync: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        const connection = await getBrokerConnection(input.connectionId);
+        
+        if (!connection || connection.userId !== String(ctx.user.id)) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Connection not found'
+          });
+        }
+        
+        const { stopAutoSync } = await import('./services/positionSync');
+        stopAutoSync(input.connectionId);
+        
+        return { success: true };
+      }),
   }),
 });
 

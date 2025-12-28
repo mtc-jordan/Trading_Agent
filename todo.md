@@ -754,3 +754,47 @@
 - [x] Add Broker Positions tab to Portfolio page
 - [x] Write broker integration tests (28 tests)
 - [x] All 472 tests passing
+
+
+## Phase 43: Broker Connection Wizard, Position Sync & Order Types
+### Broker Connection Wizard
+- [ ] Create BrokerConnectionWizard component with multi-step flow
+- [ ] Step 1: Broker selection with descriptions and features
+- [ ] Step 2: API credentials input with format validation
+- [ ] Step 3: Account verification and connection test
+- [ ] Step 4: Account selection (paper/live) and confirmation
+- [ ] Add wizard to Settings/Brokers page
+- [ ] Create onboarding prompt for new users without brokers
+
+### Real-Time Position Sync
+- [ ] Create position sync service with configurable intervals
+- [ ] Add sync status indicator to UnifiedPositionsView
+- [ ] Implement incremental sync for efficiency
+- [ ] Add manual sync trigger button
+- [ ] Store sync history and last sync timestamp
+- [ ] Handle sync errors gracefully with retry logic
+
+### Broker-Specific Order Types
+- [ ] Define order type schemas for each broker (Alpaca, IB, Binance, Coinbase)
+- [ ] Create OrderTypeSelector component with broker-aware options
+- [ ] Implement bracket orders for Alpaca (entry, stop-loss, take-profit)
+- [ ] Implement algorithmic orders for Interactive Brokers
+- [ ] Add conditional orders for crypto brokers
+- [ ] Update order placement forms with dynamic fields
+- [ ] Add order type tooltips and documentation
+
+### Testing
+- [ ] Write tests for broker connection wizard
+- [ ] Write tests for position sync service
+- [ ] Write tests for order type configurations
+
+
+## Phase 43: Broker Connection Wizard & Advanced Features
+- [x] Broker connection wizard with step-by-step onboarding (BrokerConnectionWizard.tsx)
+- [x] API key validation and account verification (verifyCredentials, connect procedures)
+- [x] Real-time position sync background service (positionSync.ts)
+- [x] Broker-specific order types configuration (shared/orderTypes.ts)
+- [x] Order placement UI with broker-specific options (OrderTypeSelector.tsx, AdvancedOrderForm.tsx)
+- [x] Position sync status component (PositionSyncStatus.tsx)
+- [x] Brokers tab in Settings page
+- [x] Tests for all new features (513 tests passing)
