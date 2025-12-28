@@ -145,3 +145,16 @@
 - [x] Add export functionality (CSV)
 - [x] Statistics overview with charts (pie chart, bar chart)
 - [x] Write unit tests for analysis history (114 tests passing)
+
+## Phase 13: Analysis Comparison Feature
+- [x] Add selection checkboxes to analysis history table
+- [x] Create "Compare Selected" button with selection count (max 5)
+- [x] Build comparison modal with side-by-side layout
+- [x] Display agent scores comparison chart (radar chart)
+- [x] Show recommendation evolution timeline with line charts
+- [x] Add confidence trend visualization
+- [x] Visual timeline with recommendation cards
+- [x] Data table comparison view
+- [x] Add export comparison report (CSV)
+- [x] Comparison mode toggle with banner
+- [x] Unit tests for comparison feature (129 tests passing)
