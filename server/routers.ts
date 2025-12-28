@@ -5274,6 +5274,138 @@ export const appRouter = router({
           benchmark: input.symbol.includes('BTC') ? 'BTC' : 'SPY',
         });
       }),
+
+    // Prediction Tracking
+    recordPrediction: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        assetType: z.enum(['stock', 'crypto']),
+        predictionSignal: z.enum(['buy', 'sell', 'hold']),
+        confidence: z.number(),
+        entryPrice: z.number(),
+        targetPrice: z.number().optional(),
+        stopLoss: z.number().optional(),
+        agentVotes: z.record(z.string(), z.enum(['buy', 'sell', 'hold'])),
+        consensusMethod: z.string(),
+        marketRegime: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { recordPrediction, initializeSampleData } = await import('./services/ai-agents/PredictionTracking');
+        // Initialize sample data for demo
+        initializeSampleData(ctx.user.openId);
+        return recordPrediction({
+          userId: ctx.user.openId,
+          ...input,
+        });
+      }),
+
+    updatePredictionOutcome: protectedProcedure
+      .input(z.object({
+        predictionId: z.number(),
+        actualExitPrice: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        const { updatePredictionOutcome } = await import('./services/ai-agents/PredictionTracking');
+        return updatePredictionOutcome({
+          predictionId: input.predictionId,
+          actualExitPrice: input.actualExitPrice,
+          outcomeTimestamp: new Date(),
+        });
+      }),
+
+    getPredictionStats: protectedProcedure
+      .input(z.object({
+        days: z.number().optional().default(30),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getPredictionStats, initializeSampleData } = await import('./services/ai-agents/PredictionTracking');
+        // Initialize sample data for demo
+        initializeSampleData(ctx.user.openId);
+        return getPredictionStats(ctx.user.openId, input.days);
+      }),
+
+    getWeightHistory: protectedProcedure
+      .input(z.object({
+        days: z.number().optional().default(30),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getWeightHistory, initializeSampleData } = await import('./services/ai-agents/PredictionTracking');
+        // Initialize sample data for demo
+        initializeSampleData(ctx.user.openId);
+        return getWeightHistory(ctx.user.openId, input.days);
+      }),
+
+    getCurrentWeights: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getCurrentWeights, initializeSampleData } = await import('./services/ai-agents/PredictionTracking');
+        // Initialize sample data for demo
+        initializeSampleData(ctx.user.openId);
+        return getCurrentWeights(ctx.user.openId);
+      }),
+
+    getPendingPredictions: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getPendingPredictions } = await import('./services/ai-agents/PredictionTracking');
+        return getPendingPredictions(ctx.user.openId);
+      }),
+
+    getAllPredictions: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getAllPredictions, initializeSampleData } = await import('./services/ai-agents/PredictionTracking');
+        // Initialize sample data for demo
+        initializeSampleData(ctx.user.openId);
+        return getAllPredictions(ctx.user.openId);
+      }),
+
+    // Backtest Comparison
+    getBacktestRuns: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getUserBacktestRuns, initializeSampleBacktests } = await import('./services/ai-agents/BacktestComparison');
+        // Initialize sample backtests for demo
+        initializeSampleBacktests(ctx.user.openId);
+        return getUserBacktestRuns(ctx.user.openId);
+      }),
+
+    saveBacktestRun: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        symbol: z.string(),
+        startDate: z.string(),
+        endDate: z.string(),
+        config: z.object({
+          initialCapital: z.number(),
+          transactionCost: z.number(),
+          slippage: z.number(),
+          useAgentWeights: z.boolean(),
+          rebalanceFrequency: z.string(),
+          agentWeights: z.record(z.string(), z.number()).optional(),
+        }),
+        results: z.any(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { saveBacktestRun } = await import('./services/ai-agents/BacktestComparison');
+        return saveBacktestRun(ctx.user.openId, input);
+      }),
+
+    deleteBacktestRun: protectedProcedure
+      .input(z.object({
+        runId: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { deleteBacktestRun } = await import('./services/ai-agents/BacktestComparison');
+        return deleteBacktestRun(ctx.user.openId, input.runId);
+      }),
+
+    compareBacktests: protectedProcedure
+      .input(z.object({
+        runIds: z.array(z.string()),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { compareBacktests, initializeSampleBacktests } = await import('./services/ai-agents/BacktestComparison');
+        // Initialize sample backtests for demo
+        initializeSampleBacktests(ctx.user.openId);
+        return compareBacktests(ctx.user.openId, input.runIds);
+      }),
   }),
 });
 

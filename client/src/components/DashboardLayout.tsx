@@ -54,6 +54,8 @@ const menuItems = [
   { icon: Trophy, label: "Template Rankings", path: "/template-performance" },
   { icon: Brain, label: "Agent Explainability", path: "/agent-explainability" },
   { icon: Activity, label: "Strategy Backtester", path: "/strategy-backtester" },
+  { icon: TrendingUp, label: "Agent Weights", path: "/agent-weights" },
+  { icon: BarChart3, label: "Backtest Compare", path: "/backtest-comparison" },
   { icon: Store, label: "Marketplace", path: "/marketplace" },
   { icon: MessageSquare, label: "Community", path: "/community" },
   { icon: User, label: "Profile", path: "/profile" },

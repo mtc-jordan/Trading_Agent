@@ -45,6 +45,8 @@ import ScenarioSharing from "./pages/ScenarioSharing";
 import TemplatePerformance from "./pages/TemplatePerformance";
 import AgentExplainability from "./pages/AgentExplainability";
 import StrategyBacktester from "./pages/StrategyBacktester";
+import AgentWeightVisualization from "./pages/AgentWeightVisualization";
+import BacktestComparison from "./pages/BacktestComparison";
 
 function Router() {
   return (
@@ -89,6 +91,8 @@ function Router() {
       <Route path="/template-performance" component={TemplatePerformance} />
       <Route path="/agent-explainability" component={AgentExplainability} />
       <Route path="/strategy-backtester" component={StrategyBacktester} />
+      <Route path="/agent-weights" component={AgentWeightVisualization} />
+      <Route path="/backtest-comparison" component={BacktestComparison} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

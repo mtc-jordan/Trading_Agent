@@ -934,3 +934,22 @@
 - [x] Strategy backtester service for 7-agent consensus
 - [x] Backtester UI with performance charts
 - [x] Tests for all new features (682 tests passing)
+
+
+## Phase 50: Prediction Tracking & Visualization
+- [ ] Prediction tracking service and database schema
+- [ ] Connect explainability to track actual outcomes
+- [ ] Feed real performance data to adaptive learning
+- [ ] Agent weight visualization dashboard
+- [ ] Weight change history charts
+- [ ] Backtest comparison service
+- [ ] Side-by-side backtest comparison UI
+- [ ] Tests for all new features
+
+
+## Phase 50: Prediction Tracking & Backtest Comparison
+- [x] Prediction tracking database schema (prediction_tracking, agent_weight_history, backtest_runs tables)
+- [x] Agent weight visualization dashboard with historical weight changes
+- [x] Backtest comparison service with correlation matrix and recommendations
+- [x] Backtest comparison UI with side-by-side metrics
+- [x] Tests for all new features (714 tests passing)
