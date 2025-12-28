@@ -916,3 +916,21 @@
 - [x] Add bot presets (conservative, moderate, aggressive)
 - [x] Create agent accuracy tracking and dynamic weight adjustment
 - [x] Write comprehensive tests (668 tests passing)
+
+
+## Phase 49: Agent Explainability, Adaptive Learning & Backtester
+- [ ] Agent explainability service with decision tracking
+- [ ] Explainability dashboard UI with visualizations
+- [ ] Adaptive learning engine with weight adjustment
+- [ ] Strategy backtester service for historical validation
+- [ ] Backtester UI with performance charts
+- [ ] Tests for all new features
+
+
+## Phase 49: Agent Explainability & Backtesting
+- [x] Agent explainability service with decision tracking
+- [x] Explainability dashboard UI with indicator/pattern breakdown
+- [x] Adaptive learning engine with weight adjustment
+- [x] Strategy backtester service for 7-agent consensus
+- [x] Backtester UI with performance charts
+- [x] Tests for all new features (682 tests passing)

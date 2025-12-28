@@ -5122,6 +5122,158 @@ export const appRouter = router({
           strategyType: 'buy_hold',
         });
       }),
+
+    // Agent Explainability
+    getAgentExplanation: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ input }) => {
+        // Generate mock explanation data for now
+        const agentExplanations = [
+          {
+            agentName: 'Technical Analysis Agent',
+            agentType: 'technical',
+            finalSignal: 'buy' as const,
+            confidence: 75,
+            reasoning: 'Based on RSI oversold conditions and MACD bullish crossover',
+            indicatorContributions: [
+              { name: 'RSI', value: 28, signal: 'bullish' as const, weight: 0.15, contribution: 0.8, explanation: 'RSI at 28 indicates oversold conditions' },
+              { name: 'MACD', value: 1.5, signal: 'bullish' as const, weight: 0.12, contribution: 0.6, explanation: 'MACD histogram positive and increasing' },
+            ],
+            patternContributions: [],
+            dataPointInfluences: [],
+            bullishFactors: 4,
+            bearishFactors: 1,
+            neutralFactors: 2,
+            dominantFactor: 'RSI',
+            decisionPath: [],
+            featureImportance: [
+              { feature: 'RSI', importance: 0.25, direction: 'positive' as const, category: 'technical' },
+              { feature: 'MACD', importance: 0.20, direction: 'positive' as const, category: 'technical' },
+            ],
+            counterfactuals: [],
+          },
+          {
+            agentName: 'Fundamental Analysis Agent',
+            agentType: 'fundamental',
+            finalSignal: 'buy' as const,
+            confidence: 68,
+            reasoning: 'Strong fundamentals with low P/E and high ROE',
+            indicatorContributions: [
+              { name: 'P/E Ratio', value: 15.2, signal: 'bullish' as const, weight: 0.15, contribution: 0.6, explanation: 'P/E of 15.2 suggests undervaluation' },
+            ],
+            patternContributions: [],
+            dataPointInfluences: [],
+            bullishFactors: 3,
+            bearishFactors: 1,
+            neutralFactors: 1,
+            dominantFactor: 'P/E Ratio',
+            decisionPath: [],
+            featureImportance: [
+              { feature: 'P/E Ratio', importance: 0.30, direction: 'positive' as const, category: 'fundamental' },
+            ],
+            counterfactuals: [],
+          },
+          {
+            agentName: 'Sentiment Analysis Agent',
+            agentType: 'sentiment',
+            finalSignal: 'hold' as const,
+            confidence: 55,
+            reasoning: 'Mixed sentiment signals from news and social media',
+            indicatorContributions: [],
+            patternContributions: [],
+            dataPointInfluences: [
+              { category: 'News', name: 'News Sentiment', value: 'Neutral', impact: 'medium' as const, direction: 'neutral' as const, explanation: 'Recent news coverage is balanced' },
+            ],
+            bullishFactors: 2,
+            bearishFactors: 2,
+            neutralFactors: 3,
+            dominantFactor: 'News Sentiment',
+            decisionPath: [],
+            featureImportance: [],
+            counterfactuals: [],
+          },
+          {
+            agentName: 'Risk Management Agent',
+            agentType: 'risk',
+            finalSignal: 'buy' as const,
+            confidence: 70,
+            reasoning: 'Acceptable risk levels with good risk/reward ratio',
+            indicatorContributions: [],
+            patternContributions: [],
+            dataPointInfluences: [
+              { category: 'Risk', name: 'Volatility', value: '22%', impact: 'medium' as const, direction: 'neutral' as const, explanation: 'Volatility within acceptable range' },
+            ],
+            bullishFactors: 3,
+            bearishFactors: 1,
+            neutralFactors: 2,
+            dominantFactor: 'Risk/Reward',
+            decisionPath: [],
+            featureImportance: [],
+            counterfactuals: [],
+          },
+        ];
+
+        return {
+          symbol: input.symbol,
+          assetType: 'stock' as const,
+          finalDecision: 'buy' as const,
+          overallConfidence: 72,
+          agentExplanations,
+          votingBreakdown: {
+            buyVotes: 3,
+            sellVotes: 0,
+            holdVotes: 1,
+            consensusMethod: 'weighted',
+            consensusReached: true,
+            dissenterAgents: ['Sentiment Analysis Agent'],
+          },
+          topBullishFactors: [
+            { category: 'Technical', name: 'RSI Oversold', value: 28, impact: 'high' as const, direction: 'bullish' as const, explanation: 'Strong buy signal' },
+            { category: 'Fundamental', name: 'Low P/E', value: 15.2, impact: 'high' as const, direction: 'bullish' as const, explanation: 'Undervalued' },
+          ],
+          topBearishFactors: [],
+          conflictingSignals: [],
+          riskFactors: [
+            { name: 'Market Volatility', severity: 'medium' as const, description: 'Elevated market volatility', mitigation: 'Use position sizing' },
+          ],
+          overallRiskLevel: 'medium' as const,
+        };
+      }),
+
+    // Strategy Backtester
+    runAgentBacktest: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        startDate: z.string(),
+        endDate: z.string(),
+        initialCapital: z.number(),
+        positionSizing: z.enum(['fixed', 'percent']),
+        positionSize: z.number(),
+        stopLoss: z.number(),
+        takeProfit: z.number(),
+        useAgentWeights: z.boolean(),
+      }))
+      .mutation(async ({ input }) => {
+        const { runAgentBacktest } = await import('./services/ai-agents/StrategyBacktester');
+        return runAgentBacktest({
+          symbol: input.symbol,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          initialCapital: input.initialCapital,
+          positionSizing: input.positionSizing,
+          positionSize: input.positionSize,
+          maxPositionSize: input.initialCapital,
+          stopLoss: input.stopLoss,
+          takeProfit: input.takeProfit,
+          transactionCost: 0.1,
+          slippage: 0.05,
+          useAgentWeights: input.useAgentWeights,
+          rebalanceFrequency: 'daily',
+          benchmark: input.symbol.includes('BTC') ? 'BTC' : 'SPY',
+        });
+      }),
   }),
 });
 

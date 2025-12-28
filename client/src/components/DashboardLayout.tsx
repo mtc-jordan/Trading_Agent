@@ -52,6 +52,8 @@ const menuItems = [
   { icon: Calculator, label: "Trade Simulator", path: "/trade-simulator" },
   { icon: Share2, label: "Scenario Sharing", path: "/scenario-sharing" },
   { icon: Trophy, label: "Template Rankings", path: "/template-performance" },
+  { icon: Brain, label: "Agent Explainability", path: "/agent-explainability" },
+  { icon: Activity, label: "Strategy Backtester", path: "/strategy-backtester" },
   { icon: Store, label: "Marketplace", path: "/marketplace" },
   { icon: MessageSquare, label: "Community", path: "/community" },
   { icon: User, label: "Profile", path: "/profile" },

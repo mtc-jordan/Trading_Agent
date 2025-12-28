@@ -43,6 +43,8 @@ import PortfolioRebalancing from "./pages/PortfolioRebalancing";
 import TradeSimulator from "./pages/TradeSimulator";
 import ScenarioSharing from "./pages/ScenarioSharing";
 import TemplatePerformance from "./pages/TemplatePerformance";
+import AgentExplainability from "./pages/AgentExplainability";
+import StrategyBacktester from "./pages/StrategyBacktester";
 
 function Router() {
   return (
@@ -84,7 +86,10 @@ function Router() {
       <Route path="/rebalancing" component={PortfolioRebalancing} />
   <Route path="/trade-simulator" component={TradeSimulator} />
       <Route path="/scenario-sharing" component={ScenarioSharing} />
-      <Route path="/template-performance" component={TemplatePerformance} />     <Route path="/404" component={NotFound} />
+      <Route path="/template-performance" component={TemplatePerformance} />
+      <Route path="/agent-explainability" component={AgentExplainability} />
+      <Route path="/strategy-backtester" component={StrategyBacktester} />
+      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
