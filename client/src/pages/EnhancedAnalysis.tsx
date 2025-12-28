@@ -38,6 +38,9 @@ import {
   Gauge
 } from "lucide-react";
 import { toast } from "sonner";
+import { useBroker } from '@/contexts/BrokerContext';
+import { BrokerBadge } from '@/components/BrokerBadge';
+import { Building2 } from 'lucide-react';
 
 // Types for enhanced analysis
 interface AgentAnalysis {
@@ -139,6 +142,9 @@ export default function EnhancedAnalysis() {
   const [accountBalance, setAccountBalance] = useState(10000);
   const [result, setResult] = useState<EnhancedAnalysisResult | null>(null);
   
+  // Broker context
+  const { activeBroker, hasConnectedBroker, isPaperMode, getBrokerName } = useBroker();
+  
   const analyzeMutation = trpc.agent.enhancedAnalysis.useMutation({
     onSuccess: (data) => {
       setResult(data as unknown as EnhancedAnalysisResult);
@@ -182,7 +188,7 @@ export default function EnhancedAnalysis() {
     <DashboardLayout>
       <div className="space-y-8">
         {/* Header */}
-        <div>
+        <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500/20 to-blue-500/20">
               <Brain className="h-6 w-6 text-purple-400" />
@@ -194,6 +200,14 @@ export default function EnhancedAnalysis() {
               </p>
             </div>
           </div>
+          {/* Broker indicator */}
+          {hasConnectedBroker && activeBroker && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Execute via:</span>
+              <BrokerBadge size="sm" showStatus={true} showMode={true} />
+            </div>
+          )}
         </div>
 
         {/* Search Section */}

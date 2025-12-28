@@ -21,7 +21,9 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock, Activity, Mail, Sparkles, Bitcoin, Wallet, BellRing, Copy, BookOpen, Link2, Building2 } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock, Activity, Mail, Sparkles, Bitcoin, Wallet, BellRing, Copy, BookOpen, Link2, Building2, TrendingUp } from "lucide-react";
+import { BrokerSelector } from "./BrokerSelector";
+import { BrokerBadge } from "./BrokerBadge";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -295,20 +297,25 @@ function DashboardLayoutContent({
       </div>
 
       <SidebarInset>
-        {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
+        {/* Header with Broker Selector */}
+        <div className="flex border-b h-14 items-center justify-between bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
+          <div className="flex items-center gap-3">
+            {isMobile && (
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? "Menu"}
-                  </span>
-                </div>
-              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              <span className="font-semibold tracking-tight text-foreground">
+                {activeMenuItem?.label ?? "TradoVerse"}
+              </span>
             </div>
           </div>
-        )}
+          
+          {/* Broker Selection in Header */}
+          <div className="flex items-center gap-3">
+            <BrokerSelector variant="default" showPaperToggle={true} />
+          </div>
+        </div>
         <main className="flex-1 p-4">{children}</main>
       </SidebarInset>
     </>

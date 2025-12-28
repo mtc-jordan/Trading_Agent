@@ -16,6 +16,10 @@ import {
   BarChart3
 } from "lucide-react";
 import { toast } from "sonner";
+import { useBroker } from '@/contexts/BrokerContext';
+import { BrokerBadge } from '@/components/BrokerBadge';
+import { Building2 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 type AgentResult = {
   agent: string;
@@ -59,6 +63,9 @@ export default function Analysis() {
   const [symbol, setSymbol] = useState("");
   const [result, setResult] = useState<ConsensusResult | null>(null);
   
+  // Broker context
+  const { activeBroker, hasConnectedBroker, isPaperMode, getBrokerName } = useBroker();
+  
   const { data: availableAgents } = trpc.agent.getAvailableAgents.useQuery();
   const analyzeMutation = trpc.agent.analyze.useMutation({
     onSuccess: (data) => {
@@ -86,11 +93,21 @@ export default function Analysis() {
     <DashboardLayout>
       <div className="space-y-8">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">AI Analysis</h1>
-          <p className="text-muted-foreground">
-            Get consensus analysis from {availableAgents?.length || 7} specialized AI agents
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">AI Analysis</h1>
+            <p className="text-muted-foreground">
+              Get consensus analysis from {availableAgents?.length || 7} specialized AI agents
+            </p>
+          </div>
+          {/* Broker indicator */}
+          {hasConnectedBroker && activeBroker && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Trade via:</span>
+              <BrokerBadge size="sm" showStatus={true} showMode={true} />
+            </div>
+          )}
         </div>
 
         {/* Search Section */}

@@ -28,6 +28,9 @@ import {
   Clock,
   Percent
 } from 'lucide-react';
+import { useBroker } from '@/contexts/BrokerContext';
+import { BrokerBadge } from '@/components/BrokerBadge';
+import { Building2 } from 'lucide-react';
 
 const TOP_CRYPTOS = ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC'];
 
@@ -35,6 +38,9 @@ export default function CryptoTrading() {
   const [selectedSymbol, setSelectedSymbol] = useState('BTC');
   const [searchQuery, setSearchQuery] = useState('');
   const [interval, setInterval] = useState<'1h' | '4h' | '1d' | '1w'>('1d');
+  
+  // Broker context
+  const { activeBroker, hasConnectedBroker, isPaperMode, getBrokerName } = useBroker();
 
   // Queries
   const priceQuery = trpc.crypto.price.useQuery({ symbol: selectedSymbol });
@@ -97,7 +103,15 @@ export default function CryptoTrading() {
               24/7 cryptocurrency trading with AI-powered analysis
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* Broker indicator */}
+            {hasConnectedBroker && activeBroker && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-card border rounded-lg">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Trade via:</span>
+                <BrokerBadge size="sm" showStatus={true} showMode={true} />
+              </div>
+            )}
             <Badge variant="outline" className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
               24/7 Market

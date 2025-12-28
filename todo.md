@@ -689,3 +689,68 @@
 - [x] Test OAuth flows
 - [x] Verify order execution
 - [x] Push to GitHub
+
+
+## Phase 42: Platform-Wide Broker Integration & Visibility
+
+### Broker Context & Selection
+- [ ] Create BrokerContext for global broker state management
+- [ ] Create useBroker hook for accessing broker state
+- [ ] Add broker selection persistence (localStorage + database)
+- [ ] Create default broker preference setting
+
+### Broker Indicator Components
+- [ ] Create BrokerBadge component showing active broker
+- [ ] Create BrokerSelector dropdown component
+- [ ] Create BrokerStatusBar for header/sidebar
+- [ ] Add broker connection status indicators (connected/disconnected)
+
+### Dashboard Integration
+- [ ] Add broker selector to Dashboard header
+- [ ] Show active broker in portfolio section
+- [ ] Display broker-specific account balances
+- [ ] Add quick broker switch functionality
+
+### Paper Trading Enhancement
+- [ ] Connect Paper Trading to real broker paper accounts
+- [ ] Show which broker's paper trading is active
+- [ ] Sync paper trades with broker paper accounts
+
+### AI Analysis Integration
+- [ ] Add broker selection before trade execution
+- [ ] Show target broker in trade recommendations
+- [ ] Display broker fees/commissions in analysis
+
+### Unified Positions View
+- [ ] Create multi-broker positions aggregation
+- [ ] Show positions grouped by broker
+- [ ] Add total portfolio value across all brokers
+
+### Trading Bots Integration
+- [ ] Add broker selection to bot configuration
+- [ ] Route bot trades through selected broker
+- [ ] Show broker in bot execution logs
+
+### Testing
+- [ ] Write tests for broker context
+- [ ] Test broker selection flow
+- [ ] Verify order routing
+- [ ] Push to GitHub
+
+
+## Phase 42: Broker Integration Throughout Platform
+- [x] Create BrokerContext for global broker state management
+- [x] Create BrokerBadge component for displaying active broker
+- [x] Create BrokerSelector component for broker selection
+- [x] Add broker indicator to Dashboard
+- [x] Add broker indicator to Paper Trading page
+- [x] Add broker indicator to AI Analysis page
+- [x] Add broker indicator to Copy Trading page
+- [x] Add broker indicator to Trading Bots page
+- [x] Add broker indicator to Crypto Trading page
+- [x] Add broker indicator to Enhanced Analysis page
+- [x] Add broker indicator to Portfolio page
+- [x] Create UnifiedPositionsView component for aggregated positions
+- [x] Add Broker Positions tab to Portfolio page
+- [x] Write broker integration tests (28 tests)
+- [x] All 472 tests passing

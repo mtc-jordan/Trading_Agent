@@ -20,11 +20,19 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { useBroker } from '@/contexts/BrokerContext';
+import { BrokerBadge } from '@/components/BrokerBadge';
+import { UnifiedPositionsView } from '@/components/UnifiedPositionsView';
+import { Building2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const COLORS = ["#22c55e", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444", "#06b6d4"];
 
 export default function Portfolio() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  
+  // Broker context
+  const { activeBroker, hasConnectedBroker, isPaperMode, getBrokerName } = useBroker();
   const [newAccount, setNewAccount] = useState({
     name: "",
     type: "paper" as "paper" | "live",
@@ -82,6 +90,15 @@ export default function Portfolio() {
               Manage your trading accounts and track performance
             </p>
           </div>
+          <div className="flex items-center gap-3">
+            {/* Broker indicator */}
+            {hasConnectedBroker && activeBroker && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Active:</span>
+                <BrokerBadge size="sm" showStatus={true} showMode={true} />
+              </div>
+            )}
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
               <Button className="gradient-primary text-primary-foreground">
@@ -145,7 +162,17 @@ export default function Portfolio() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
+
+        {/* Tabs for Accounts and Broker Positions */}
+        <Tabs defaultValue="accounts" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="accounts">Trading Accounts</TabsTrigger>
+            <TabsTrigger value="positions">Broker Positions</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="accounts">
 
         {/* Portfolio Summary */}
         <div className="grid md:grid-cols-4 gap-4">
@@ -361,6 +388,12 @@ export default function Portfolio() {
             </CardContent>
           </Card>
         </div>
+          </TabsContent>
+          
+          <TabsContent value="positions">
+            <UnifiedPositionsView />
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

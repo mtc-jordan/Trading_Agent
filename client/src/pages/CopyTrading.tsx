@@ -35,11 +35,17 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
+import { useBroker } from '@/contexts/BrokerContext';
+import { BrokerBadge } from '@/components/BrokerBadge';
+import { Building2 } from 'lucide-react';
 
 export default function CopyTrading() {
   const [sortBy, setSortBy] = useState<'return' | 'winRate' | 'followers' | 'sharpe'>('return');
   const [selectedTrader, setSelectedTrader] = useState<string | null>(null);
   const [showFollowDialog, setShowFollowDialog] = useState(false);
+  
+  // Broker context
+  const { activeBroker, hasConnectedBroker, isPaperMode, getBrokerName } = useBroker();
   const [followSettings, setFollowSettings] = useState({
     allocationMode: 'fixed' as 'fixed' | 'percentage' | 'proportional',
     allocationAmount: 1000,
@@ -127,6 +133,14 @@ export default function CopyTrading() {
               Follow top traders and automatically copy their trades
             </p>
           </div>
+          {/* Broker indicator */}
+          {hasConnectedBroker && activeBroker && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Execute via:</span>
+              <BrokerBadge size="sm" showStatus={true} showMode={true} />
+            </div>
+          )}
         </div>
 
         {/* Stats Overview */}

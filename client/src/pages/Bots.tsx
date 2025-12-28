@@ -20,9 +20,16 @@ import {
   Activity
 } from "lucide-react";
 import { toast } from "sonner";
+import { useBroker } from '@/contexts/BrokerContext';
+import { BrokerBadge } from '@/components/BrokerBadge';
+import { Building2 } from 'lucide-react';
 
 export default function Bots() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  
+  // Broker context
+  const { activeBroker, hasConnectedBroker, isPaperMode, getBrokerName } = useBroker();
+  
   const [newBot, setNewBot] = useState({
     name: "",
     description: "",
@@ -115,6 +122,15 @@ export default function Bots() {
               Create and manage your automated trading strategies
             </p>
           </div>
+          <div className="flex items-center gap-3">
+            {/* Broker indicator */}
+            {hasConnectedBroker && activeBroker && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-card border rounded-lg">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Execute via:</span>
+                <BrokerBadge size="sm" showStatus={true} showMode={true} />
+              </div>
+            )}
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
               <Button className="gradient-primary text-primary-foreground">
@@ -241,6 +257,7 @@ export default function Bots() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Bots Grid */}

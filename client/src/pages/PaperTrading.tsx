@@ -32,6 +32,11 @@ import {
   Percent
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useBroker } from '@/contexts/BrokerContext';
+import { BrokerBadge } from '@/components/BrokerBadge';
+import { BrokerSelectField } from '@/components/BrokerSelector';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Building2 } from 'lucide-react';
 
 const POPULAR_STOCKS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'META', 'AMD', 'NFLX', 'DIS'];
 
@@ -43,6 +48,11 @@ export default function PaperTrading() {
   const [limitPrice, setLimitPrice] = useState('');
   const [stopPrice, setStopPrice] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [useLiveBroker, setUseLiveBroker] = useState(false);
+  const [selectedBrokerId, setSelectedBrokerId] = useState('');
+  
+  // Broker context
+  const { activeBroker, connectedBrokers, isPaperMode, getBrokerName, hasConnectedBroker } = useBroker();
 
   // Get user's accounts first
   const accountsQuery = trpc.paperTrading.listAccounts.useQuery();
@@ -174,10 +184,18 @@ export default function PaperTrading() {
               Practice trading with virtual money - no risk involved
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* Show active broker */}
+            {hasConnectedBroker && activeBroker && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-card border rounded-lg">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Broker:</span>
+                <BrokerBadge size="sm" showStatus={true} showMode={true} />
+              </div>
+            )}
             <Badge variant="outline" className="flex items-center gap-1">
               <Activity className="h-3 w-3" />
-              Simulated
+              {isPaperMode ? 'Paper Mode' : 'Live Mode'}
             </Badge>
             <Button variant="outline" size="sm" onClick={() => accountId && resetAccountMutation.mutate({ accountId })}>
               <RefreshCw className="h-4 w-4 mr-1" />
