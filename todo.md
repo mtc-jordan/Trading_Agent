@@ -867,3 +867,25 @@
 - [x] Trade execution from simulator with broker integration
 - [x] Updated Trade Simulator UI with Templates and Execute tabs
 - [x] Tests for all new features (615 tests passing)
+
+
+## Phase 47: Scenario Sharing, Monte Carlo Visualization & Template Tracking
+- [ ] Scenario sharing database schema (shared_scenarios, scenario_imports)
+- [ ] Scenario sharing API routes (create, list, import, like)
+- [ ] Monte Carlo visualization with probability distribution charts
+- [ ] VaR (Value at Risk) calculations and display
+- [ ] Confidence interval visualization
+- [ ] Template performance tracking service
+- [ ] Historical accuracy and returns tracking for templates
+- [ ] Scenario sharing UI with community features
+- [ ] Tests for all new features
+
+
+## Phase 47: Scenario Sharing & Visualization (Completed)
+- [x] Scenario sharing database schema (shared_scenarios, scenario_likes, scenario_imports tables)
+- [x] Monte Carlo visualization with VaR and confidence intervals
+- [x] Template performance tracking service with rankings
+- [x] Scenario sharing UI with community features (ScenarioSharing page)
+- [x] Template performance page with comparison view
+- [x] MonteCarloChart visualization component
+- [x] Tests for all new features (642 tests passing)

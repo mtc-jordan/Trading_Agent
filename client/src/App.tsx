@@ -41,6 +41,8 @@ import OrderHistory from "./pages/OrderHistory";
 import BrokerAnalytics from "./pages/BrokerAnalytics";
 import PortfolioRebalancing from "./pages/PortfolioRebalancing";
 import TradeSimulator from "./pages/TradeSimulator";
+import ScenarioSharing from "./pages/ScenarioSharing";
+import TemplatePerformance from "./pages/TemplatePerformance";
 
 function Router() {
   return (
@@ -80,8 +82,9 @@ function Router() {
       <Route path="/order-history" component={OrderHistory} />
       <Route path="/broker-analytics" component={BrokerAnalytics} />
       <Route path="/rebalancing" component={PortfolioRebalancing} />
-      <Route path="/simulator" component={TradeSimulator} />
-      <Route path="/404" component={NotFound} />
+  <Route path="/trade-simulator" component={TradeSimulator} />
+      <Route path="/scenario-sharing" component={ScenarioSharing} />
+      <Route path="/template-performance" component={TemplatePerformance} />     <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );

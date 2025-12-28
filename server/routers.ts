@@ -4725,6 +4725,179 @@ export const appRouter = router({
         return getExecutionHistory(String(ctx.user.id), input || {});
       }),
 
+    // === Scenario Sharing Routes ===
+    
+    // Share a scenario with the community
+    shareScenario: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        trades: z.array(z.object({
+          symbol: z.string(),
+          side: z.enum(['buy', 'sell']),
+          quantity: z.number(),
+          estimatedPrice: z.number(),
+        })),
+        positions: z.array(z.object({
+          symbol: z.string(),
+          quantity: z.number(),
+          avgCost: z.number(),
+          currentPrice: z.number(),
+        })).optional(),
+        cash: z.number().optional(),
+        category: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+        isPublic: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { shareScenario } = await import('./services/scenarioSharing');
+        return shareScenario(ctx.user.id, input);
+      }),
+
+    // Get community scenarios
+    getCommunityScenarios: publicProcedure
+      .input(z.object({
+        category: z.string().optional(),
+        search: z.string().optional(),
+        sortBy: z.enum(['likes', 'imports', 'recent']).optional(),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const { getCommunityScenarios } = await import('./services/scenarioSharing');
+        return getCommunityScenarios(input || {});
+      }),
+
+    // Get scenario by ID
+    getScenarioById: publicProcedure
+      .input(z.object({ scenarioId: z.number() }))
+      .query(async ({ input }) => {
+        const { getScenarioById } = await import('./services/scenarioSharing');
+        return getScenarioById(input.scenarioId);
+      }),
+
+    // Like a scenario
+    likeScenario: protectedProcedure
+      .input(z.object({ scenarioId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { likeScenario } = await import('./services/scenarioSharing');
+        return likeScenario(input.scenarioId, ctx.user.id);
+      }),
+
+    // Import a scenario
+    importScenario: protectedProcedure
+      .input(z.object({ scenarioId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { importScenario } = await import('./services/scenarioSharing');
+        return importScenario(input.scenarioId, ctx.user.id);
+      }),
+
+    // Get user's shared scenarios
+    getUserScenarios: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getUserScenarios } = await import('./services/scenarioSharing');
+        return getUserScenarios(ctx.user.id);
+      }),
+
+    // Delete a shared scenario
+    deleteScenario: protectedProcedure
+      .input(z.object({ scenarioId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { deleteScenario } = await import('./services/scenarioSharing');
+        return deleteScenario(input.scenarioId, ctx.user.id);
+      }),
+
+    // Check if user has liked a scenario
+    hasUserLiked: protectedProcedure
+      .input(z.object({ scenarioId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { hasUserLiked } = await import('./services/scenarioSharing');
+        return hasUserLiked(input.scenarioId, ctx.user.id);
+      }),
+
+    // Get scenario categories
+    getScenarioCategories: publicProcedure
+      .query(async () => {
+        const { getScenarioCategories } = await import('./services/scenarioSharing');
+        return getScenarioCategories();
+      }),
+
+    // === Monte Carlo Visualization Routes ===
+    
+    // Generate Monte Carlo visualization data
+    getMonteCarloVisualization: protectedProcedure
+      .input(z.object({
+        simulationResults: z.array(z.number()),
+        initialValue: z.number(),
+        numBins: z.number().optional(),
+        pathData: z.array(z.array(z.number())).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { generateVisualizationData, generateRiskSummary, formatForChartJS } = await import('./services/monteCarloVisualization');
+        const visualizationData = generateVisualizationData(
+          input.simulationResults,
+          input.initialValue,
+          input.numBins || 50,
+          10,
+          input.pathData
+        );
+        const riskSummary = generateRiskSummary(visualizationData, input.initialValue);
+        const chartData = formatForChartJS(visualizationData, input.initialValue);
+        return { visualizationData, riskSummary, chartData };
+      }),
+
+    // === Template Performance Tracking Routes ===
+    
+    // Get template performance
+    getTemplatePerformance: publicProcedure
+      .input(z.object({
+        templateId: z.string(),
+        period: z.enum(['1m', '3m', '6m', '1y', 'ytd']).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { calculateTemplatePerformance } = await import('./services/templatePerformanceTracking');
+        const endDate = new Date();
+        let startDate: Date;
+        switch (input.period || '1y') {
+          case '1m': startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+          case '3m': startDate = new Date(endDate.getTime() - 90 * 24 * 60 * 60 * 1000); break;
+          case '6m': startDate = new Date(endDate.getTime() - 180 * 24 * 60 * 60 * 1000); break;
+          case 'ytd': startDate = new Date(endDate.getFullYear(), 0, 1); break;
+          default: startDate = new Date(endDate.getTime() - 365 * 24 * 60 * 60 * 1000);
+        }
+        return calculateTemplatePerformance(input.templateId, startDate, endDate);
+      }),
+
+    // Get template rankings
+    getTemplateRankings: publicProcedure
+      .input(z.object({
+        period: z.enum(['1m', '3m', '6m', '1y', 'ytd']).optional(),
+        sortBy: z.enum(['return', 'sharpe', 'drawdown']).optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const { getTemplateRankings } = await import('./services/templatePerformanceTracking');
+        return getTemplateRankings(input?.period || '1y', input?.sortBy || 'return');
+      }),
+
+    // Compare template performance
+    compareTemplatePerformance: publicProcedure
+      .input(z.object({
+        templateIds: z.array(z.string()),
+        period: z.enum(['1m', '3m', '6m', '1y']).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { compareTemplatePerformance } = await import('./services/templatePerformanceTracking');
+        return compareTemplatePerformance(input.templateIds, input.period || '1y');
+      }),
+
+    // Get template performance summary
+    getTemplatePerformanceSummary: publicProcedure
+      .input(z.object({ templateId: z.string() }))
+      .query(async ({ input }) => {
+        const { getTemplatePerformanceSummary } = await import('./services/templatePerformanceTracking');
+        return getTemplatePerformanceSummary(input.templateId);
+      }),
+
     // Run Monte Carlo stress test
     runStressTest: protectedProcedure
       .input(z.object({

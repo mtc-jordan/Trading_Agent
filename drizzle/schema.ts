@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean, json } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean, json, date } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -2102,3 +2102,74 @@ export const brokerPerformanceMetrics = mysqlTable("broker_performance_metrics",
 
 export type BrokerPerformanceMetricsRecord = typeof brokerPerformanceMetrics.$inferSelect;
 export type InsertBrokerPerformanceMetrics = typeof brokerPerformanceMetrics.$inferInsert;
+
+
+/**
+ * Shared Scenarios - Community scenario sharing
+ */
+export const sharedScenarios = mysqlTable("shared_scenarios", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  scenarioData: json("scenarioData").notNull(),
+  trades: json("trades").notNull(),
+  positions: json("positions"),
+  cash: decimal("cash", { precision: 18, scale: 2 }).default("0"),
+  category: varchar("category", { length: 50 }).default("general"),
+  tags: json("tags"),
+  isPublic: boolean("isPublic").default(true),
+  likesCount: int("likesCount").default(0),
+  importsCount: int("importsCount").default(0),
+  viewsCount: int("viewsCount").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SharedScenario = typeof sharedScenarios.$inferSelect;
+export type InsertSharedScenario = typeof sharedScenarios.$inferInsert;
+
+/**
+ * Scenario Likes - Track user likes on scenarios
+ */
+export const scenarioLikes = mysqlTable("scenario_likes", {
+  id: int("id").autoincrement().primaryKey(),
+  scenarioId: int("scenarioId").notNull(),
+  userId: int("userId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ScenarioLike = typeof scenarioLikes.$inferSelect;
+
+/**
+ * Scenario Imports - Track scenario imports
+ */
+export const scenarioImports = mysqlTable("scenario_imports", {
+  id: int("id").autoincrement().primaryKey(),
+  scenarioId: int("scenarioId").notNull(),
+  userId: int("userId").notNull(),
+  importedAt: timestamp("importedAt").defaultNow().notNull(),
+});
+
+export type ScenarioImport = typeof scenarioImports.$inferSelect;
+
+/**
+ * Template Performance - Track template performance over time
+ */
+export const templatePerformance = mysqlTable("template_performance", {
+  id: int("id").autoincrement().primaryKey(),
+  templateId: varchar("templateId", { length: 100 }).notNull(),
+  snapshotDate: date("snapshotDate").notNull(),
+  portfolioValue: decimal("portfolioValue", { precision: 18, scale: 2 }).notNull(),
+  dailyReturn: decimal("dailyReturn", { precision: 10, scale: 6 }),
+  cumulativeReturn: decimal("cumulativeReturn", { precision: 10, scale: 6 }),
+  volatility: decimal("volatility", { precision: 10, scale: 6 }),
+  sharpeRatio: decimal("sharpeRatio", { precision: 10, scale: 4 }),
+  maxDrawdown: decimal("maxDrawdown", { precision: 10, scale: 6 }),
+  winRate: decimal("winRate", { precision: 10, scale: 4 }),
+  totalTrades: int("totalTrades").default(0),
+  positions: json("positions"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TemplatePerformance = typeof templatePerformance.$inferSelect;
