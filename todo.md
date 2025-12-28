@@ -827,3 +827,24 @@
 - [x] Portfolio rebalancing engine with drift calculations
 - [x] Rebalancing UI with trade suggestions
 - [x] Tests for all new features (554 tests passing)
+
+
+## Phase 45: Trade Simulator & What-If Analysis
+- [ ] Trade simulation service and calculations engine
+- [ ] API routes for trade simulation and scenario analysis
+- [ ] Trade Simulator UI with scenario builder
+- [ ] Visual comparisons and risk impact charts
+- [ ] Before/after portfolio metrics comparison
+- [ ] Tests for all new features
+
+
+## Phase 45: Trade Simulator
+- [x] Trade simulation service with calculations engine
+- [x] API routes for simulation and scenario analysis
+- [x] Trade Simulator UI with scenario builder
+- [x] Visual comparisons and risk impact charts
+- [x] Scenario comparison with best/worst identification
+- [x] Cost estimation (commission, slippage, tax impact)
+- [x] Portfolio metrics (diversification, beta, Sharpe ratio)
+- [x] Warning system for risk alerts
+- [x] Tests for all new features (584 tests passing)

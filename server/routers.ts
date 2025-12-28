@@ -4489,6 +4489,123 @@ export const appRouter = router({
         const { getRebalancingHistory } = await import('./services/portfolioRebalancing');
         return getRebalancingHistory(String(ctx.user.id), input.allocationId, input.limit);
       }),
+
+    // ==================== TRADE SIMULATOR ====================
+    
+    // Simulate trades and get impact analysis
+    simulateTrades: protectedProcedure
+      .input(z.object({
+        trades: z.array(z.object({
+          symbol: z.string(),
+          side: z.enum(['buy', 'sell']),
+          quantity: z.number().positive(),
+          estimatedPrice: z.number().positive(),
+          brokerType: z.string().optional(),
+        })),
+        scenarioName: z.string().default('Default Scenario'),
+        currentPositions: z.array(z.object({
+          symbol: z.string(),
+          quantity: z.number(),
+          avgCost: z.number(),
+          currentPrice: z.number(),
+          marketValue: z.number(),
+          unrealizedPL: z.number(),
+          unrealizedPLPercent: z.number(),
+          weight: z.number(),
+        })).optional(),
+        currentCash: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { simulateTrades } = await import('./services/tradeSimulator');
+        return simulateTrades(
+          String(ctx.user.id),
+          input.trades,
+          input.scenarioName,
+          input.currentPositions,
+          input.currentCash
+        );
+      }),
+
+    // Compare multiple scenarios
+    compareScenarios: protectedProcedure
+      .input(z.object({
+        scenarios: z.array(z.object({
+          name: z.string(),
+          trades: z.array(z.object({
+            symbol: z.string(),
+            side: z.enum(['buy', 'sell']),
+            quantity: z.number().positive(),
+            estimatedPrice: z.number().positive(),
+            brokerType: z.string().optional(),
+          })),
+        })),
+        currentPositions: z.array(z.object({
+          symbol: z.string(),
+          quantity: z.number(),
+          avgCost: z.number(),
+          currentPrice: z.number(),
+          marketValue: z.number(),
+          unrealizedPL: z.number(),
+          unrealizedPLPercent: z.number(),
+          weight: z.number(),
+        })).optional(),
+        currentCash: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { compareScenarios } = await import('./services/tradeSimulator');
+        return compareScenarios(
+          String(ctx.user.id),
+          input.scenarios,
+          input.currentPositions,
+          input.currentCash
+        );
+      }),
+
+    // Generate optimized trades for target allocation
+    generateOptimizedTrades: protectedProcedure
+      .input(z.object({
+        targetAllocations: z.array(z.object({
+          symbol: z.string(),
+          targetPercent: z.number().min(0).max(100),
+        })),
+        currentPositions: z.array(z.object({
+          symbol: z.string(),
+          quantity: z.number(),
+          avgCost: z.number(),
+          currentPrice: z.number(),
+          marketValue: z.number(),
+          unrealizedPL: z.number(),
+          unrealizedPLPercent: z.number(),
+          weight: z.number(),
+        })),
+        currentCash: z.number(),
+        constraints: z.object({
+          maxTradesPerSymbol: z.number().optional(),
+          minTradeValue: z.number().optional(),
+          maxConcentration: z.number().optional(),
+          preserveCash: z.number().optional(),
+        }).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { generateOptimizedTrades } = await import('./services/tradeSimulator');
+        return generateOptimizedTrades(
+          String(ctx.user.id),
+          input.targetAllocations,
+          input.currentPositions,
+          input.currentCash,
+          input.constraints
+        );
+      }),
+
+    // Get sample positions for demo
+    getSamplePositions: publicProcedure
+      .query(async () => {
+        const { getSamplePositions } = await import('./services/tradeSimulator');
+        return {
+          positions: getSamplePositions(),
+          cash: 15000,
+        };
+      }),
   }),
 });
 

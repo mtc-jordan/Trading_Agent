@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock, Activity, Mail, Sparkles, Bitcoin, Wallet, BellRing, Copy, BookOpen, Link2, Building2, TrendingUp, ClipboardList, BarChart3, Scale } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock, Activity, Mail, Sparkles, Bitcoin, Wallet, BellRing, Copy, BookOpen, Link2, Building2, TrendingUp, ClipboardList, BarChart3, Scale, Calculator } from "lucide-react";
 import { BrokerSelector } from "./BrokerSelector";
 import { BrokerBadge } from "./BrokerBadge";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -49,6 +49,7 @@ const menuItems = [
   { icon: ClipboardList, label: "Order History", path: "/order-history" },
   { icon: BarChart3, label: "Broker Analytics", path: "/broker-analytics" },
   { icon: Scale, label: "Rebalancing", path: "/rebalancing" },
+  { icon: Calculator, label: "Trade Simulator", path: "/simulator" },
   { icon: Store, label: "Marketplace", path: "/marketplace" },
   { icon: MessageSquare, label: "Community", path: "/community" },
   { icon: User, label: "Profile", path: "/profile" },
