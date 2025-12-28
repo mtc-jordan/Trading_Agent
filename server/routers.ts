@@ -67,6 +67,49 @@ import {
   markAlertAsRead,
   getAlertSummary
 } from "./services/alertSystem";
+import {
+  getTopTraders,
+  getTraderById,
+  startCopyTrading,
+  stopCopyTrading,
+  getUserCopySettings,
+  getCopySettingsById,
+  updateCopySettings,
+  getUserCopyTrades,
+  getCopyPerformance,
+  pauseCopyTrading,
+  resumeCopyTrading
+} from "./services/copyTrading";
+import {
+  createJournalEntry,
+  updateJournalEntry,
+  deleteJournalEntry,
+  getJournalEntryById,
+  getUserJournalEntries,
+  getJournalEntriesByDate,
+  getJournalStats,
+  getEmotionCorrelations,
+  detectTradingPatterns,
+  getUserTags,
+  searchJournalEntries
+} from "./services/tradingJournal";
+import {
+  getAvailableExchanges,
+  getExchangeInfo,
+  connectExchange,
+  disconnectExchange,
+  getUserConnections,
+  getConnectionById,
+  getExchangeBalances,
+  getExchangePositions,
+  placeExchangeOrder,
+  cancelExchangeOrder,
+  getOrderHistory,
+  syncExchangeData,
+  getOAuthUrl,
+  handleOAuthCallback,
+  testConnection
+} from "./services/exchangeIntegration";
 import { callDataApi } from "./_core/dataApi";
 import { getStockQuote, searchStocks, getCachedPrice, getAllCachedPrices, fetchStockPrice } from "./services/marketData";
 import { getUserEmailPreferences, updateUserEmailPreferences, testSendGridApiKey } from "./services/twilioEmail";
@@ -3035,6 +3078,334 @@ export const appRouter = router({
     getSummary: protectedProcedure
       .query(async ({ ctx }) => {
         return getAlertSummary(String(ctx.user.id));
+      }),
+  }),
+
+  // Copy Trading Router
+  copyTrading: router({
+    getTopTraders: protectedProcedure
+      .input(z.object({
+        sortBy: z.enum(['return', 'winRate', 'followers', 'sharpe']).optional(),
+        limit: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return getTopTraders(input?.sortBy, input?.limit);
+      }),
+
+    getTrader: protectedProcedure
+      .input(z.object({ traderId: z.string() }))
+      .query(async ({ input }) => {
+        return getTraderById(input.traderId);
+      }),
+
+    follow: protectedProcedure
+      .input(z.object({
+        traderId: z.string(),
+        settings: z.object({
+          allocationMode: z.enum(['fixed', 'percentage', 'proportional']).default('fixed'),
+          allocationAmount: z.number().default(1000),
+          maxPositionSize: z.number().optional(),
+          maxDailyLoss: z.number().optional(),
+          copyStopLoss: z.boolean().optional(),
+          copyTakeProfit: z.boolean().optional(),
+          excludeSymbols: z.array(z.string()).optional(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return startCopyTrading(String(ctx.user.id), input.traderId, input.settings);
+      }),
+
+    unfollow: protectedProcedure
+      .input(z.object({ copySettingsId: z.string() }))
+      .mutation(async ({ input }) => {
+        return stopCopyTrading(input.copySettingsId);
+      }),
+
+    getFollowed: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getUserCopySettings(String(ctx.user.id));
+      }),
+
+    getSettings: protectedProcedure
+      .input(z.object({ copySettingsId: z.string() }))
+      .query(async ({ input }) => {
+        return getCopySettingsById(input.copySettingsId);
+      }),
+
+    updateSettings: protectedProcedure
+      .input(z.object({
+        copySettingsId: z.string(),
+        settings: z.object({
+          allocationMode: z.enum(['fixed', 'percentage', 'proportional']).optional(),
+          allocationAmount: z.number().optional(),
+          maxPositionSize: z.number().optional(),
+          maxDailyLoss: z.number().optional(),
+          copyStopLoss: z.boolean().optional(),
+          copyTakeProfit: z.boolean().optional(),
+          excludeSymbols: z.array(z.string()).optional(),
+        }),
+      }))
+      .mutation(async ({ input }) => {
+        return updateCopySettings(input.copySettingsId, input.settings);
+      }),
+
+    getHistory: protectedProcedure
+      .input(z.object({
+        limit: z.number().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        return getUserCopyTrades(String(ctx.user.id), input?.limit);
+      }),
+
+    getStats: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getCopyPerformance(String(ctx.user.id));
+      }),
+
+    pause: protectedProcedure
+      .input(z.object({ copySettingsId: z.string() }))
+      .mutation(async ({ input }) => {
+        return pauseCopyTrading(input.copySettingsId);
+      }),
+
+    resume: protectedProcedure
+      .input(z.object({ copySettingsId: z.string() }))
+      .mutation(async ({ input }) => {
+        return resumeCopyTrading(input.copySettingsId);
+      }),
+  }),
+
+  // Trading Journal Router
+  journal: router({
+    create: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        side: z.enum(['long', 'short']),
+        entryPrice: z.number(),
+        exitPrice: z.number().optional(),
+        quantity: z.number(),
+        entryDate: z.date(),
+        exitDate: z.date().optional(),
+        setup: z.enum(['breakout', 'pullback', 'reversal', 'trend_following', 'range_bound', 'news_based', 'technical', 'fundamental', 'other']),
+        emotionBefore: z.enum(['confident', 'anxious', 'greedy', 'fearful', 'neutral', 'excited', 'frustrated', 'calm']),
+        emotionDuring: z.enum(['confident', 'anxious', 'greedy', 'fearful', 'neutral', 'excited', 'frustrated', 'calm']).optional(),
+        emotionAfter: z.enum(['confident', 'anxious', 'greedy', 'fearful', 'neutral', 'excited', 'frustrated', 'calm']).optional(),
+        confidenceLevel: z.number().min(1).max(10),
+        planFollowed: z.boolean(),
+        notes: z.string(),
+        lessonsLearned: z.string().optional(),
+        mistakes: z.array(z.string()).optional(),
+        tags: z.array(z.string()),
+        screenshots: z.array(z.string()).optional(),
+        tradeId: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return createJournalEntry(String(ctx.user.id), input);
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        entryId: z.string(),
+        updates: z.object({
+          exitPrice: z.number().optional(),
+          exitDate: z.date().optional(),
+          emotionDuring: z.enum(['confident', 'anxious', 'greedy', 'fearful', 'neutral', 'excited', 'frustrated', 'calm']).optional(),
+          emotionAfter: z.enum(['confident', 'anxious', 'greedy', 'fearful', 'neutral', 'excited', 'frustrated', 'calm']).optional(),
+          notes: z.string().optional(),
+          lessonsLearned: z.string().optional(),
+          mistakes: z.array(z.string()).optional(),
+          tags: z.array(z.string()).optional(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return updateJournalEntry(String(ctx.user.id), input.entryId, input.updates);
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ entryId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        return deleteJournalEntry(String(ctx.user.id), input.entryId);
+      }),
+
+    getById: protectedProcedure
+      .input(z.object({ entryId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        return getJournalEntryById(String(ctx.user.id), input.entryId);
+      }),
+
+    list: protectedProcedure
+      .input(z.object({
+        filters: z.object({
+          symbol: z.string().optional(),
+          setup: z.enum(['breakout', 'pullback', 'reversal', 'trend_following', 'range_bound', 'news_based', 'technical', 'fundamental', 'other']).optional(),
+          emotion: z.enum(['confident', 'anxious', 'greedy', 'fearful', 'neutral', 'excited', 'frustrated', 'calm']).optional(),
+          outcome: z.enum(['win', 'loss', 'breakeven', 'open']).optional(),
+          tags: z.array(z.string()).optional(),
+          startDate: z.date().optional(),
+          endDate: z.date().optional(),
+          minPnL: z.number().optional(),
+          maxPnL: z.number().optional(),
+        }).optional(),
+        limit: z.number().optional(),
+        offset: z.number().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        return getUserJournalEntries(String(ctx.user.id), input?.filters, input?.limit, input?.offset);
+      }),
+
+    getByDate: protectedProcedure
+      .input(z.object({ year: z.number(), month: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getJournalEntriesByDate(String(ctx.user.id), input.year, input.month);
+      }),
+
+    getStats: protectedProcedure
+      .input(z.object({
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        const timeframe = input?.startDate && input?.endDate 
+          ? { startDate: input.startDate, endDate: input.endDate }
+          : undefined;
+        return getJournalStats(String(ctx.user.id), timeframe);
+      }),
+
+    getEmotionCorrelations: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getEmotionCorrelations(String(ctx.user.id));
+      }),
+
+    getPatterns: protectedProcedure
+      .query(async ({ ctx }) => {
+        return detectTradingPatterns(String(ctx.user.id));
+      }),
+
+    getTags: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getUserTags(String(ctx.user.id));
+      }),
+
+    search: protectedProcedure
+      .input(z.object({ query: z.string() }))
+      .query(async ({ ctx, input }) => {
+        return searchJournalEntries(String(ctx.user.id), input.query);
+      }),
+  }),
+
+  // Exchange Integration Router
+  exchange: router({
+    getAvailable: publicProcedure
+      .query(async () => {
+        return getAvailableExchanges();
+      }),
+
+    getInfo: publicProcedure
+      .input(z.object({ exchange: z.enum(['binance', 'coinbase', 'alpaca', 'interactive_brokers']) }))
+      .query(async ({ input }) => {
+        return getExchangeInfo(input.exchange);
+      }),
+
+    connect: protectedProcedure
+      .input(z.object({
+        exchange: z.enum(['binance', 'coinbase', 'alpaca', 'interactive_brokers']),
+        credentials: z.object({
+          apiKey: z.string(),
+          apiSecret: z.string(),
+          passphrase: z.string().optional(),
+          accountId: z.string().optional(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return connectExchange(String(ctx.user.id), input.exchange, input.credentials);
+      }),
+
+    disconnect: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        return disconnectExchange(String(ctx.user.id), input.connectionId);
+      }),
+
+    getConnections: protectedProcedure
+      .query(async ({ ctx }) => {
+        return getUserConnections(String(ctx.user.id));
+      }),
+
+    getConnection: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ ctx, input }) => {
+        return getConnectionById(String(ctx.user.id), input.connectionId);
+      }),
+
+    getBalances: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ input }) => {
+        return getExchangeBalances(input.connectionId);
+      }),
+
+    getPositions: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ input }) => {
+        return getExchangePositions(input.connectionId);
+      }),
+
+    placeOrder: protectedProcedure
+      .input(z.object({
+        connectionId: z.string(),
+        order: z.object({
+          symbol: z.string(),
+          side: z.enum(['buy', 'sell']),
+          type: z.enum(['market', 'limit', 'stop', 'stop_limit']),
+          quantity: z.number(),
+          price: z.number().optional(),
+          stopPrice: z.number().optional(),
+        }),
+      }))
+      .mutation(async ({ input }) => {
+        return placeExchangeOrder(input.connectionId, input.order);
+      }),
+
+    cancelOrder: protectedProcedure
+      .input(z.object({ connectionId: z.string(), orderId: z.string() }))
+      .mutation(async ({ input }) => {
+        return cancelExchangeOrder(input.connectionId, input.orderId);
+      }),
+
+    getOrderHistory: protectedProcedure
+      .input(z.object({ connectionId: z.string(), limit: z.number().optional() }))
+      .query(async ({ input }) => {
+        return getOrderHistory(input.connectionId, input.limit);
+      }),
+
+    sync: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        return syncExchangeData(String(ctx.user.id), input.connectionId);
+      }),
+
+    getOAuthUrl: protectedProcedure
+      .input(z.object({
+        exchange: z.enum(['binance', 'coinbase', 'alpaca', 'interactive_brokers']),
+        redirectUri: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const state = Math.random().toString(36).substring(7);
+        return { url: getOAuthUrl(input.exchange, input.redirectUri, state), state };
+      }),
+
+    handleOAuth: protectedProcedure
+      .input(z.object({
+        exchange: z.enum(['binance', 'coinbase', 'alpaca', 'interactive_brokers']),
+        code: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        return handleOAuthCallback(String(ctx.user.id), input.exchange, input.code);
+      }),
+
+    testConnection: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ input }) => {
+        return testConnection(input.connectionId);
       }),
   }),
 });

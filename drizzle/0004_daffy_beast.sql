@@ -1,1 +1,0 @@
-ALTER TABLE `user_fallback_settings` MODIFY COLUMN `fallbackPriority` json;

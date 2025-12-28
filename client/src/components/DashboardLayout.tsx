@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock, Activity, Mail, Sparkles, Bitcoin, Wallet, BellRing } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock, Activity, Mail, Sparkles, Bitcoin, Wallet, BellRing, Copy, BookOpen, Link2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -40,6 +40,9 @@ const menuItems = [
   { icon: Bitcoin, label: "Crypto Trading", path: "/crypto" },
   { icon: Wallet, label: "Paper Trading", path: "/paper-trading" },
   { icon: BellRing, label: "Alerts", path: "/alerts" },
+  { icon: Copy, label: "Copy Trading", path: "/copy-trading" },
+  { icon: BookOpen, label: "Trading Journal", path: "/journal" },
+  { icon: Link2, label: "Exchanges", path: "/exchanges" },
   { icon: Store, label: "Marketplace", path: "/marketplace" },
   { icon: MessageSquare, label: "Community", path: "/community" },
   { icon: User, label: "Profile", path: "/profile" },

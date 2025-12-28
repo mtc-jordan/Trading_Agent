@@ -1608,3 +1608,166 @@ export const cryptoWatchlist = mysqlTable("crypto_watchlist", {
 
 export type CryptoWatchlistItem = typeof cryptoWatchlist.$inferSelect;
 export type InsertCryptoWatchlistItem = typeof cryptoWatchlist.$inferInsert;
+
+
+/**
+ * Copy Trading - Traders
+ * Top traders that can be copied
+ */
+export const copyTraders = mysqlTable("copy_traders", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  bio: text("bio"),
+  totalReturn: decimal("totalReturn", { precision: 10, scale: 2 }).default("0").notNull(),
+  winRate: decimal("winRate", { precision: 5, scale: 2 }).default("0").notNull(),
+  totalTrades: int("totalTrades").default(0).notNull(),
+  followers: int("followers").default(0).notNull(),
+  riskScore: int("riskScore").default(5).notNull(),
+  sharpeRatio: decimal("sharpeRatio", { precision: 6, scale: 3 }).default("0").notNull(),
+  maxDrawdown: decimal("maxDrawdown", { precision: 6, scale: 2 }).default("0").notNull(),
+  tradingStyle: mysqlEnum("tradingStyle", ["day_trader", "swing_trader", "position_trader", "scalper"]).default("swing_trader").notNull(),
+  isVerified: boolean("isVerified").default(false).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CopyTrader = typeof copyTraders.$inferSelect;
+export type InsertCopyTrader = typeof copyTraders.$inferInsert;
+
+/**
+ * Copy Trading - Settings
+ * User's copy trading configurations
+ */
+export const copySettings = mysqlTable("copy_settings", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  followerId: varchar("followerId", { length: 64 }).notNull(),
+  traderId: varchar("traderId", { length: 64 }).notNull(),
+  allocationMode: mysqlEnum("allocationMode", ["fixed", "percentage", "proportional"]).default("fixed").notNull(),
+  allocationAmount: decimal("allocationAmount", { precision: 18, scale: 2 }).default("1000").notNull(),
+  maxPositionSize: decimal("maxPositionSize", { precision: 18, scale: 2 }).default("10000").notNull(),
+  maxDailyLoss: decimal("maxDailyLoss", { precision: 18, scale: 2 }).default("500").notNull(),
+  copyStopLoss: boolean("copyStopLoss").default(true).notNull(),
+  copyTakeProfit: boolean("copyTakeProfit").default(true).notNull(),
+  excludeSymbols: json("excludeSymbols").$type<string[]>(),
+  status: mysqlEnum("status", ["active", "paused", "stopped"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CopySettingsRecord = typeof copySettings.$inferSelect;
+export type InsertCopySettings = typeof copySettings.$inferInsert;
+
+/**
+ * Copy Trading - Trades
+ * Copied trade history
+ */
+export const copyTrades = mysqlTable("copy_trades", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  copySettingsId: varchar("copySettingsId", { length: 64 }).notNull(),
+  originalTradeId: varchar("originalTradeId", { length: 64 }),
+  followerId: varchar("followerId", { length: 64 }).notNull(),
+  traderId: varchar("traderId", { length: 64 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  side: mysqlEnum("side", ["buy", "sell"]).notNull(),
+  originalQuantity: decimal("originalQuantity", { precision: 18, scale: 8 }).notNull(),
+  copiedQuantity: decimal("copiedQuantity", { precision: 18, scale: 8 }).notNull(),
+  originalPrice: decimal("originalPrice", { precision: 18, scale: 8 }).notNull(),
+  copiedPrice: decimal("copiedPrice", { precision: 18, scale: 8 }).notNull(),
+  slippage: decimal("slippage", { precision: 8, scale: 4 }).default("0").notNull(),
+  pnl: decimal("pnl", { precision: 18, scale: 2 }),
+  status: mysqlEnum("status", ["pending", "executed", "failed", "cancelled"]).default("pending").notNull(),
+  executedAt: timestamp("executedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CopyTradeRecord = typeof copyTrades.$inferSelect;
+export type InsertCopyTrade = typeof copyTrades.$inferInsert;
+
+/**
+ * Trading Journal - Entries
+ * User's trading journal entries
+ */
+export const journalEntries = mysqlTable("journal_entries", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  tradeId: varchar("tradeId", { length: 64 }),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  side: mysqlEnum("side", ["long", "short"]).notNull(),
+  entryPrice: decimal("entryPrice", { precision: 18, scale: 8 }).notNull(),
+  exitPrice: decimal("exitPrice", { precision: 18, scale: 8 }),
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
+  entryDate: timestamp("entryDate").notNull(),
+  exitDate: timestamp("exitDate"),
+  setup: mysqlEnum("setup", ["breakout", "pullback", "reversal", "trend_following", "range_bound", "news_based", "technical", "fundamental", "other"]).default("other").notNull(),
+  emotionBefore: mysqlEnum("emotionBefore", ["confident", "anxious", "greedy", "fearful", "neutral", "excited", "frustrated", "calm"]).default("neutral").notNull(),
+  emotionDuring: mysqlEnum("emotionDuring", ["confident", "anxious", "greedy", "fearful", "neutral", "excited", "frustrated", "calm"]),
+  emotionAfter: mysqlEnum("emotionAfter", ["confident", "anxious", "greedy", "fearful", "neutral", "excited", "frustrated", "calm"]),
+  confidenceLevel: int("confidenceLevel").default(5).notNull(),
+  planFollowed: boolean("planFollowed").default(true).notNull(),
+  notes: text("notes").notNull(),
+  lessonsLearned: text("lessonsLearned"),
+  mistakes: json("mistakes").$type<string[]>(),
+  tags: json("tags").$type<string[]>(),
+  screenshots: json("screenshots").$type<string[]>(),
+  outcome: mysqlEnum("outcome", ["win", "loss", "breakeven", "open"]).default("open"),
+  pnl: decimal("pnl", { precision: 18, scale: 2 }),
+  pnlPercent: decimal("pnlPercent", { precision: 8, scale: 4 }),
+  riskRewardRatio: decimal("riskRewardRatio", { precision: 6, scale: 2 }),
+  holdingPeriod: int("holdingPeriod"), // in minutes
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type JournalEntryRecord = typeof journalEntries.$inferSelect;
+export type InsertJournalEntry = typeof journalEntries.$inferInsert;
+
+/**
+ * Exchange Connections
+ * User's connected exchange accounts
+ */
+export const exchangeConnections = mysqlTable("exchange_connections", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  exchange: mysqlEnum("exchange", ["binance", "coinbase", "alpaca", "interactive_brokers"]).notNull(),
+  status: mysqlEnum("status", ["connected", "disconnected", "error", "pending"]).default("pending").notNull(),
+  apiKeyEncrypted: text("apiKeyEncrypted"),
+  apiSecretEncrypted: text("apiSecretEncrypted"),
+  passphraseEncrypted: text("passphraseEncrypted"),
+  accountId: varchar("accountId", { length: 64 }),
+  permissions: json("permissions").$type<string[]>(),
+  error: text("error"),
+  lastSyncAt: timestamp("lastSyncAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ExchangeConnectionRecord = typeof exchangeConnections.$inferSelect;
+export type InsertExchangeConnection = typeof exchangeConnections.$inferInsert;
+
+/**
+ * Exchange Orders
+ * Orders placed through connected exchanges
+ */
+export const exchangeOrders = mysqlTable("exchange_orders", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  connectionId: varchar("connectionId", { length: 64 }).notNull(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  exchangeOrderId: varchar("exchangeOrderId", { length: 128 }),
+  exchange: mysqlEnum("exchange", ["binance", "coinbase", "alpaca", "interactive_brokers"]).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  side: mysqlEnum("side", ["buy", "sell"]).notNull(),
+  orderType: mysqlEnum("orderType", ["market", "limit", "stop", "stop_limit"]).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
+  price: decimal("price", { precision: 18, scale: 8 }),
+  stopPrice: decimal("stopPrice", { precision: 18, scale: 8 }),
+  filledQuantity: decimal("filledQuantity", { precision: 18, scale: 8 }).default("0").notNull(),
+  avgFillPrice: decimal("avgFillPrice", { precision: 18, scale: 8 }),
+  status: mysqlEnum("status", ["pending", "open", "filled", "partially_filled", "cancelled", "rejected"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ExchangeOrderRecord = typeof exchangeOrders.$inferSelect;
+export type InsertExchangeOrder = typeof exchangeOrders.$inferInsert;
