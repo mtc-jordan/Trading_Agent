@@ -27,6 +27,9 @@ import { RLTradingAgent } from "./services/rlAgent";
 import { runMonteCarloSimulation, runQuickSimulation, MonteCarloConfig } from "./services/monteCarloSimulation";
 import { runWalkForwardOptimization, runQuickWalkForward, WalkForwardConfig } from "./services/walkForwardOptimization";
 import { runPortfolioBacktest, runQuickPortfolioAnalysis, PortfolioConfig } from "./services/portfolioBacktesting";
+import { analyzeMarketRegime, getQuickRegime, RegimeConfig } from "./services/regimeSwitching";
+import { calculateGreeks, calculateImpliedVolatility, generateGreeksVisualization, generateOptionChain, analyzeStrategy, OptionInput } from "./services/optionsGreeks";
+import { analyzeSentiment, getQuickSentiment, analyzeBatchSentiment } from "./services/sentimentAnalysis";
 import { callDataApi } from "./_core/dataApi";
 import { getStockQuote, searchStocks, getCachedPrice, getAllCachedPrices, fetchStockPrice } from "./services/marketData";
 import { getUserEmailPreferences, updateUserEmailPreferences, testSendGridApiKey } from "./services/twilioEmail";
@@ -2603,6 +2606,133 @@ export const appRouter = router({
           correlationMatrix: result.correlationMatrix,
           diversificationMetrics: result.diversificationMetrics,
         };
+      }),
+  }),
+
+  // Regime-Switching Models
+  regime: router({
+    analyze: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        lookbackDays: z.number().min(30).max(365).default(90),
+      }))
+      .mutation(async ({ input }) => {
+        const config: RegimeConfig = {
+          symbol: input.symbol,
+          lookbackDays: input.lookbackDays,
+        };
+        return analyzeMarketRegime(config);
+      }),
+
+    quick: protectedProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ input }) => {
+        return getQuickRegime(input.symbol);
+      }),
+  }),
+
+  // Options Greeks Calculator
+  options: router({
+    calculateGreeks: protectedProcedure
+      .input(z.object({
+        underlyingPrice: z.number().positive(),
+        strikePrice: z.number().positive(),
+        timeToExpiry: z.number().min(0).max(5),
+        riskFreeRate: z.number().min(0).max(1).default(0.05),
+        volatility: z.number().min(0.01).max(5).default(0.25),
+        optionType: z.enum(['call', 'put']),
+        dividendYield: z.number().min(0).max(1).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const optionInput: OptionInput = {
+          underlyingPrice: input.underlyingPrice,
+          strikePrice: input.strikePrice,
+          timeToExpiry: input.timeToExpiry,
+          riskFreeRate: input.riskFreeRate,
+          volatility: input.volatility,
+          optionType: input.optionType,
+          dividendYield: input.dividendYield,
+        };
+        const greeks = calculateGreeks(optionInput);
+        const visualization = generateGreeksVisualization(optionInput);
+        return { greeks, visualization };
+      }),
+
+    impliedVolatility: protectedProcedure
+      .input(z.object({
+        marketPrice: z.number().positive(),
+        underlyingPrice: z.number().positive(),
+        strikePrice: z.number().positive(),
+        timeToExpiry: z.number().min(0.001).max(5),
+        riskFreeRate: z.number().min(0).max(1).default(0.05),
+        optionType: z.enum(['call', 'put']),
+        dividendYield: z.number().min(0).max(1).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const iv = calculateImpliedVolatility(
+          input.marketPrice,
+          input.underlyingPrice,
+          input.strikePrice,
+          input.timeToExpiry,
+          input.riskFreeRate,
+          input.optionType,
+          input.dividendYield || 0
+        );
+        return { impliedVolatility: iv, annualizedPercent: iv * 100 };
+      }),
+
+    optionChain: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        expirationDays: z.number().min(1).max(365).default(30),
+        numStrikes: z.number().min(5).max(21).default(11),
+      }))
+      .query(async ({ input }) => {
+        return generateOptionChain(input.symbol, input.expirationDays, input.numStrikes);
+      }),
+
+    analyzeStrategy: protectedProcedure
+      .input(z.object({
+        legs: z.array(z.object({
+          optionType: z.enum(['call', 'put']),
+          strikePrice: z.number().positive(),
+          quantity: z.number(),
+          premium: z.number().min(0),
+        })),
+        underlyingPrice: z.number().positive(),
+        timeToExpiry: z.number().min(0).max(5),
+        riskFreeRate: z.number().min(0).max(1).default(0.05),
+        volatility: z.number().min(0.01).max(5).default(0.25),
+      }))
+      .mutation(async ({ input }) => {
+        return analyzeStrategy(
+          input.legs,
+          input.underlyingPrice,
+          input.timeToExpiry,
+          input.riskFreeRate,
+          input.volatility
+        );
+      }),
+  }),
+
+  // Sentiment Analysis
+  sentiment: router({
+    analyze: protectedProcedure
+      .input(z.object({ symbol: z.string() }))
+      .mutation(async ({ input }) => {
+        return analyzeSentiment(input.symbol);
+      }),
+
+    quick: protectedProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ input }) => {
+        return getQuickSentiment(input.symbol);
+      }),
+
+    batch: protectedProcedure
+      .input(z.object({ symbols: z.array(z.string()).max(10) }))
+      .mutation(async ({ input }) => {
+        return analyzeBatchSentiment(input.symbols);
       }),
   }),
 });

@@ -5,6 +5,9 @@ import { StrategyComparison } from "@/components/StrategyComparison";
 import { MonteCarloSimulation } from "@/components/MonteCarloSimulation";
 import { WalkForwardOptimization } from "@/components/WalkForwardOptimization";
 import { PortfolioBacktesting } from "@/components/PortfolioBacktesting";
+import { RegimeSwitching } from "@/components/RegimeSwitching";
+import { OptionsGreeks } from "@/components/OptionsGreeks";
+import { SentimentAnalysis } from "@/components/SentimentAnalysis";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -469,7 +472,7 @@ export default function EnhancedAnalysis() {
             <Card className="bg-card border-border">
               <CardContent className="pt-6">
                 <Tabs defaultValue="agents" className="w-full">
-                  <TabsList className="grid w-full grid-cols-8 mb-6">
+                  <TabsList className="grid w-full grid-cols-11 mb-6">
                     <TabsTrigger value="agents">AI Agents</TabsTrigger>
                     <TabsTrigger value="technical">Technical</TabsTrigger>
                     <TabsTrigger value="research">Research</TabsTrigger>
@@ -478,6 +481,9 @@ export default function EnhancedAnalysis() {
                     <TabsTrigger value="montecarlo">Monte Carlo</TabsTrigger>
                     <TabsTrigger value="walkforward">Walk-Forward</TabsTrigger>
                     <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+                    <TabsTrigger value="regime">Regime</TabsTrigger>
+                    <TabsTrigger value="options">Options</TabsTrigger>
+                    <TabsTrigger value="sentiment">Sentiment</TabsTrigger>
                   </TabsList>
 
                   {/* Agents Tab */}
@@ -772,6 +778,21 @@ export default function EnhancedAnalysis() {
                   {/* Portfolio Tab */}
                   <TabsContent value="portfolio">
                     <PortfolioBacktesting />
+                  </TabsContent>
+
+                  {/* Regime Tab */}
+                  <TabsContent value="regime">
+                    <RegimeSwitching />
+                  </TabsContent>
+
+                  {/* Options Tab */}
+                  <TabsContent value="options">
+                    <OptionsGreeks />
+                  </TabsContent>
+
+                  {/* Sentiment Tab */}
+                  <TabsContent value="sentiment">
+                    <SentimentAnalysis />
                   </TabsContent>
                 </Tabs>
               </CardContent>

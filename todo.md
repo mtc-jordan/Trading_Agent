@@ -522,3 +522,37 @@
 - [x] Integrate components into Enhanced Analysis page
 - [x] Write unit tests for new features (341 tests passing)
 - [x] Push to GitHub
+
+
+## Phase 38: Regime-Switching, Options Greeks & Sentiment Analysis
+### Regime-Switching Models
+- [x] Create regime detection service with HMM-based approach
+- [x] Implement bull/bear/sideways/volatile regime classification
+- [x] Add regime probability calculations
+- [x] Implement automatic strategy parameter adjustment per regime
+- [x] Create regime transition matrix
+- [x] Build Regime-Switching UI component with regime indicator
+
+### Options Greeks Calculator
+- [x] Create Black-Scholes options pricing service
+- [x] Implement Delta calculation (price sensitivity)
+- [x] Implement Gamma calculation (delta sensitivity)
+- [x] Implement Theta calculation (time decay)
+- [x] Implement Vega calculation (volatility sensitivity)
+- [x] Implement Rho calculation (interest rate sensitivity)
+- [x] Add implied volatility calculation
+- [x] Build Options Greeks UI with calculator and visualization
+
+### Sentiment Data Integration
+- [x] Create sentiment analysis service
+- [x] Implement news sentiment scoring
+- [x] Add social media sentiment aggregation
+- [x] Calculate sentiment momentum indicators
+- [x] Integrate sentiment into AI recommendations
+- [x] Build Sentiment Analysis UI with sentiment charts
+
+### Integration
+- [x] Add tRPC endpoints for all three features
+- [x] Integrate components into Enhanced Analysis page
+- [x] Write unit tests for new features (366 tests passing)
+- [x] Push to GitHub
