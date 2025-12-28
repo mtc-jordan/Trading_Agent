@@ -1282,6 +1282,48 @@ export const appRouter = router({
         return db.getAllUsers();
       }),
 
+    listUsers: adminProcedure
+      .input(z.object({
+        page: z.number().default(1),
+        limit: z.number().default(20),
+        search: z.string().optional(),
+        role: z.enum(["admin", "user"]).optional(),
+        tier: z.enum(["free", "starter", "pro", "elite"]).optional(),
+      }))
+      .query(async ({ input }) => {
+        const allUsers = await db.getAllUsers();
+        let filtered = allUsers;
+        
+        // Apply search filter
+        if (input.search) {
+          const search = input.search.toLowerCase();
+          filtered = filtered.filter(u => 
+            u.name?.toLowerCase().includes(search) || 
+            u.email?.toLowerCase().includes(search)
+          );
+        }
+        
+        // Apply role filter
+        if (input.role) {
+          filtered = filtered.filter(u => u.role === input.role);
+        }
+        
+        // Apply tier filter
+        if (input.tier) {
+          filtered = filtered.filter(u => u.subscriptionTier === input.tier);
+        }
+        
+        const total = filtered.length;
+        const start = (input.page - 1) * input.limit;
+        const users = filtered.slice(start, start + input.limit);
+        
+        const verifiedCount = allUsers.filter(u => u.isEmailVerified).length;
+        const adminCount = allUsers.filter(u => u.role === "admin").length;
+        const paidCount = allUsers.filter(u => u.subscriptionTier !== "free").length;
+        
+        return { users, total, verifiedCount, adminCount, paidCount };
+      }),
+
     updateUserRole: adminProcedure
       .input(z.object({
         userId: z.number(),

@@ -24,6 +24,10 @@ import BotDetail from "./pages/BotDetail";
 import AdminJobs from "./pages/AdminJobs";
 import AdminEmailSettings from "./pages/AdminEmailSettings";
 import VerifyEmail from "./pages/VerifyEmail";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
+import AdminAnalytics from "./pages/admin/AdminAnalytics";
 
 function Router() {
   return (
@@ -47,6 +51,10 @@ function Router() {
       <Route path="/bots/:id" component={BotDetail} />
       <Route path="/admin/jobs" component={AdminJobs} />
       <Route path="/admin/email" component={AdminEmailSettings} />
+      <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/users" component={AdminUsers} />
+      <Route path="/admin/subscriptions" component={AdminSubscriptions} />
+      <Route path="/admin/analytics" component={AdminAnalytics} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

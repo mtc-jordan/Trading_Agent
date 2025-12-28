@@ -44,9 +44,7 @@ const menuItems = [
 ];
 
 const adminMenuItems = [
-  { icon: Activity, label: "Job Monitor", path: "/admin/jobs" },
-  { icon: Mail, label: "Email Settings", path: "/admin/email" },
-  { icon: Shield, label: "Admin Panel", path: "/admin" },
+  { icon: Shield, label: "Admin Dashboard", path: "/admin/dashboard" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

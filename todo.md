@@ -401,3 +401,18 @@
 - [x] Add email verification section to Settings page
 - [x] Add verification status indicator with resend option
 - [x] Show verified badge when email is confirmed
+
+## Phase 34: Dedicated Admin Dashboard
+- [x] Create AdminLayout component with dedicated sidebar navigation
+- [x] Build admin dashboard overview page with KPIs and quick actions
+- [x] Create admin user management page with search, filters, role management
+- [x] Create admin subscription management page with revenue metrics
+- [x] Create admin platform analytics page with usage stats
+- [x] Move email settings to admin section (AdminEmailSettings uses AdminLayout)
+- [x] Move job monitoring to admin section (AdminJobs uses AdminLayout)
+- [x] Add admin-only route protection (AdminLayout checks user.role)
+- [x] Create admin quick actions panel (in AdminDashboard)
+- [x] Add listUsers API route with pagination and filters
+- [x] Update main navigation to link to admin dashboard
+- [ ] Create admin bot/marketplace management page (future)
+- [ ] Add admin activity log (future)
