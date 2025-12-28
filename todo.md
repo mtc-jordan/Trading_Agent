@@ -273,3 +273,74 @@
 - [x] Integrate with existing bot_schedules table
 - [x] Add timezone selection for schedules
 - [x] Add Schedules navigation to sidebar
+
+## Phase 23: Email Notification Service
+- [x] Create email_templates table for notification templates
+- [x] Create email_queue table for pending emails
+- [x] Create email_preferences table for user preferences
+- [x] Create email notification service with template support
+- [x] Implement bot execution completion notifications
+- [x] Implement bot error notifications
+- [x] Implement watchlist price target alerts
+- [x] Implement AI recommendation change alerts
+- [ ] Add email preferences to user settings UI (future)
+- [ ] Create email preview/test functionality (future)
+
+## Phase 24: Portfolio Real-Time Value Updates
+- [x] Create portfolio value calculation service
+- [x] Add WebSocket channel for portfolio updates
+- [x] Create usePortfolio hook for real-time updates
+- [x] Create PortfolioValueCard component
+- [ ] Update Dashboard to show live portfolio value (integration pending)
+- [x] Add portfolio value change indicators (up/down arrows)
+- [x] Show percentage change in real-time
+- [ ] Add portfolio value history chart with live updates (future)
+
+## Phase 25: Background Job System
+- [x] Create scheduled_jobs table for job queue
+- [x] Create job_executions table for execution logs
+- [x] Implement job scheduler service (jobScheduler.ts)
+- [x] Run bots at configured schedule times
+- [x] Track prediction accuracy after each bot run
+- [x] Generate weekly performance reports
+- [x] Generate monthly performance reports
+- [ ] Add job monitoring dashboard (future)
+
+## Phase 26: Marketplace Enhancements
+- [x] Add accuracy score filter to marketplace (tier-based: Elite, Verified, Standard, Basic)
+- [x] Add sort by accuracy option
+- [x] Add sort by return option
+- [x] Add sort by copies option
+- [x] Show results count with filter info
+- [ ] Add accuracy range slider (0-100%) (future)
+- [ ] Show accuracy trend indicator on listings (future)
+
+## Phase 27: Bot Detail Page
+- [x] Create dedicated bot detail page route (/bots/:id)
+- [x] Show bot configuration and settings
+- [x] Display accuracy history with agent breakdown
+- [x] Show execution logs with pagination
+- [x] Display performance benchmarks vs S&P 500
+- [x] Show performance tab with return/win rate charts
+- [x] Add toggle bot status (active/paused)
+- [x] Add run bot now action
+- [ ] Add risk rules summary section (future)
+- [ ] Show schedule information (future)
+- [ ] Add edit/delete actions (future)
+
+## Phase 28: Mobile Responsive Optimization
+- [x] Add mobile-first CSS utilities (touch-target, safe-area, responsive text)
+- [x] Create MobileNav component with bottom navigation
+- [x] Create MobileHeader component
+- [x] Make Dashboard cards stack on mobile (2-col grid)
+- [x] Add responsive grid utilities
+- [x] Add mobile-friendly form inputs (16px font)
+- [x] Add touch-friendly controls (44px min touch targets)
+- [x] Add safe area insets for notched devices
+- [x] Add reduced motion support
+- [x] Add high contrast mode support
+- [x] Add scrollbar-hide utility
+- [x] Add horizontal scroll snap for mobile
+- [ ] Optimize sidebar for mobile (collapsible) - already supported
+- [ ] Optimize remaining pages for mobile (future)
+- [ ] Test all pages on mobile viewports (future)

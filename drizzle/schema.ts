@@ -996,3 +996,216 @@ export const badgeDefinitions = {
 } as const;
 
 export type BadgeId = keyof typeof badgeDefinitions;
+
+
+// ============================================
+// PHASE 23-25: Email Notifications & Background Jobs
+// ============================================
+
+/**
+ * Email Templates - reusable email templates
+ */
+export const emailTemplates = mysqlTable("email_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  templateKey: varchar("templateKey", { length: 100 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  htmlContent: text("htmlContent").notNull(),
+  textContent: text("textContent"),
+  // Variables that can be replaced
+  variables: json("variables"), // Array of variable names
+  // Status
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertEmailTemplate = typeof emailTemplates.$inferInsert;
+
+/**
+ * Email Queue - pending emails to be sent
+ */
+export const emailQueue = mysqlTable("email_queue", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  toEmail: varchar("toEmail", { length: 320 }).notNull(),
+  templateId: int("templateId"),
+  // Email content
+  subject: varchar("subject", { length: 500 }).notNull(),
+  htmlContent: text("htmlContent").notNull(),
+  textContent: text("textContent"),
+  // Template variables
+  templateVariables: json("templateVariables"),
+  // Priority and scheduling
+  priority: mysqlEnum("priority", ["low", "normal", "high", "urgent"]).default("normal").notNull(),
+  scheduledAt: timestamp("scheduledAt"),
+  // Status
+  status: mysqlEnum("status", ["pending", "processing", "sent", "failed", "cancelled"]).default("pending").notNull(),
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("maxAttempts").default(3).notNull(),
+  lastAttemptAt: timestamp("lastAttemptAt"),
+  sentAt: timestamp("sentAt"),
+  errorMessage: text("errorMessage"),
+  // Tracking
+  messageId: varchar("messageId", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmailQueueItem = typeof emailQueue.$inferSelect;
+export type InsertEmailQueueItem = typeof emailQueue.$inferInsert;
+
+/**
+ * User Email Preferences - email notification settings
+ */
+export const userEmailPreferences = mysqlTable("user_email_preferences", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  // Notification types
+  botExecutionComplete: boolean("botExecutionComplete").default(true).notNull(),
+  botExecutionError: boolean("botExecutionError").default(true).notNull(),
+  priceTargetAlert: boolean("priceTargetAlert").default(true).notNull(),
+  recommendationChange: boolean("recommendationChange").default(true).notNull(),
+  weeklyReport: boolean("weeklyReport").default(true).notNull(),
+  monthlyReport: boolean("monthlyReport").default(true).notNull(),
+  marketingEmails: boolean("marketingEmails").default(false).notNull(),
+  // Frequency settings
+  digestFrequency: mysqlEnum("digestFrequency", ["immediate", "hourly", "daily", "weekly"]).default("immediate").notNull(),
+  quietHoursStart: varchar("quietHoursStart", { length: 5 }), // HH:MM format
+  quietHoursEnd: varchar("quietHoursEnd", { length: 5 }),
+  timezone: varchar("timezone", { length: 50 }).default("UTC").notNull(),
+  // Status
+  isUnsubscribed: boolean("isUnsubscribed").default(false).notNull(),
+  unsubscribedAt: timestamp("unsubscribedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserEmailPreference = typeof userEmailPreferences.$inferSelect;
+export type InsertUserEmailPreference = typeof userEmailPreferences.$inferInsert;
+
+/**
+ * Background Jobs - scheduled and queued jobs
+ */
+export const backgroundJobs = mysqlTable("background_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  jobType: mysqlEnum("jobType", [
+    "bot_execution",
+    "price_tracking",
+    "accuracy_calculation",
+    "weekly_report",
+    "monthly_report",
+    "watchlist_check",
+    "email_send",
+    "cleanup"
+  ]).notNull(),
+  // Job configuration
+  payload: json("payload").notNull(), // Job-specific data
+  // Scheduling
+  scheduledAt: timestamp("scheduledAt").notNull(),
+  priority: int("priority").default(5).notNull(), // 1-10, lower is higher priority
+  // Execution
+  status: mysqlEnum("status", ["pending", "running", "completed", "failed", "cancelled"]).default("pending").notNull(),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+  // Results
+  result: json("result"),
+  errorMessage: text("errorMessage"),
+  // Retry logic
+  attempts: int("attempts").default(0).notNull(),
+  maxAttempts: int("maxAttempts").default(3).notNull(),
+  nextRetryAt: timestamp("nextRetryAt"),
+  // Tracking
+  workerId: varchar("workerId", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BackgroundJob = typeof backgroundJobs.$inferSelect;
+export type InsertBackgroundJob = typeof backgroundJobs.$inferInsert;
+
+/**
+ * Job History - completed job logs
+ */
+export const jobHistory = mysqlTable("job_history", {
+  id: int("id").autoincrement().primaryKey(),
+  jobId: int("jobId").notNull(),
+  jobType: varchar("jobType", { length: 50 }).notNull(),
+  // Execution details
+  status: mysqlEnum("status", ["completed", "failed"]).notNull(),
+  startedAt: timestamp("startedAt").notNull(),
+  completedAt: timestamp("completedAt").notNull(),
+  durationMs: int("durationMs").notNull(),
+  // Results
+  payload: json("payload"),
+  result: json("result"),
+  errorMessage: text("errorMessage"),
+  // Metrics
+  itemsProcessed: int("itemsProcessed").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type JobHistoryEntry = typeof jobHistory.$inferSelect;
+export type InsertJobHistoryEntry = typeof jobHistory.$inferInsert;
+
+/**
+ * Performance Reports - generated reports
+ */
+export const performanceReports = mysqlTable("performance_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  reportType: mysqlEnum("reportType", ["weekly", "monthly", "quarterly", "annual"]).notNull(),
+  // Report period
+  periodStart: timestamp("periodStart").notNull(),
+  periodEnd: timestamp("periodEnd").notNull(),
+  // Performance metrics
+  totalTrades: int("totalTrades").default(0).notNull(),
+  winningTrades: int("winningTrades").default(0).notNull(),
+  losingTrades: int("losingTrades").default(0).notNull(),
+  winRate: decimal("winRate", { precision: 5, scale: 4 }),
+  totalProfitLoss: decimal("totalProfitLoss", { precision: 18, scale: 2 }),
+  percentageReturn: decimal("percentageReturn", { precision: 8, scale: 4 }),
+  // Risk metrics
+  maxDrawdown: decimal("maxDrawdown", { precision: 8, scale: 4 }),
+  sharpeRatio: decimal("sharpeRatio", { precision: 6, scale: 4 }),
+  // AI accuracy
+  totalPredictions: int("totalPredictions").default(0).notNull(),
+  correctPredictions: int("correctPredictions").default(0).notNull(),
+  predictionAccuracy: decimal("predictionAccuracy", { precision: 5, scale: 4 }),
+  // Benchmark comparison
+  benchmarkReturn: decimal("benchmarkReturn", { precision: 8, scale: 4 }),
+  alphaGenerated: decimal("alphaGenerated", { precision: 8, scale: 4 }),
+  // Report content
+  summaryHtml: text("summaryHtml"),
+  detailedJson: json("detailedJson"),
+  // Email tracking
+  emailSent: boolean("emailSent").default(false).notNull(),
+  emailSentAt: timestamp("emailSentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PerformanceReport = typeof performanceReports.$inferSelect;
+export type InsertPerformanceReport = typeof performanceReports.$inferInsert;
+
+/**
+ * Portfolio Snapshots - for real-time value tracking
+ */
+export const portfolioValueSnapshots = mysqlTable("portfolio_value_snapshots", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  accountId: int("accountId").notNull(),
+  // Value at snapshot time
+  totalValue: decimal("totalValue", { precision: 18, scale: 2 }).notNull(),
+  cashBalance: decimal("cashBalance", { precision: 18, scale: 2 }).notNull(),
+  positionsValue: decimal("positionsValue", { precision: 18, scale: 2 }).notNull(),
+  // Change from previous
+  valueChange: decimal("valueChange", { precision: 18, scale: 2 }),
+  percentChange: decimal("percentChange", { precision: 8, scale: 4 }),
+  // Snapshot type
+  snapshotType: mysqlEnum("snapshotType", ["realtime", "hourly", "daily", "weekly"]).default("realtime").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PortfolioValueSnapshot = typeof portfolioValueSnapshots.$inferSelect;
+export type InsertPortfolioValueSnapshot = typeof portfolioValueSnapshots.$inferInsert;

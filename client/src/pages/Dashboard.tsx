@@ -38,23 +38,27 @@ export default function Dashboard() {
     <DashboardLayout>
       <div className="space-y-8">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-            <p className="text-muted-foreground">
-              Welcome back, {user?.name || "Trader"}! Here's your trading overview.
-            </p>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
+              <p className="text-sm sm:text-base text-muted-foreground">
+                Welcome back, {user?.name || "Trader"}!
+              </p>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <ConnectionStatus />
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <ConnectionStatus />
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <Link href="/analysis">
-              <Button variant="outline" className="border-border">
+              <Button variant="outline" className="border-border flex-1 sm:flex-none">
                 <Brain className="w-4 h-4 mr-2" />
-                AI Analysis
+                <span className="hidden xs:inline">AI</span> Analysis
               </Button>
             </Link>
             <Link href="/bots">
-              <Button className="gradient-primary text-primary-foreground">
+              <Button className="gradient-primary text-primary-foreground flex-1 sm:flex-none">
                 <Plus className="w-4 h-4 mr-2" />
                 New Bot
               </Button>
@@ -63,62 +67,62 @@ export default function Dashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Balance</CardTitle>
-              <Wallet className="w-4 h-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Balance</CardTitle>
+              <Wallet className="w-4 h-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+              <div className="text-lg sm:text-2xl font-bold text-foreground truncate">
+                ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </div>
-              <div className={`flex items-center text-sm ${totalPnl >= 0 ? "text-profit" : "text-loss"}`}>
-                {totalPnl >= 0 ? <ArrowUp className="w-4 h-4 mr-1" /> : <ArrowDown className="w-4 h-4 mr-1" />}
-                {pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(2)}% all time
+              <div className={`flex items-center text-xs sm:text-sm ${totalPnl >= 0 ? "text-profit" : "text-loss"}`}>
+                {totalPnl >= 0 ? <ArrowUp className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> : <ArrowDown className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />}
+                {pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%
               </div>
             </CardContent>
           </Card>
 
           <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total P&L</CardTitle>
-              <DollarSign className="w-4 h-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total P&L</CardTitle>
+              <DollarSign className="w-4 h-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${totalPnl >= 0 ? "text-profit" : "text-loss"}`}>
-                {totalPnl >= 0 ? "+" : ""}${totalPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+              <div className={`text-lg sm:text-2xl font-bold truncate ${totalPnl >= 0 ? "text-profit" : "text-loss"}`}>
+                {totalPnl >= 0 ? "+" : ""}${Math.abs(totalPnl).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </div>
-              <p className="text-sm text-muted-foreground">
-                Across {accounts?.length || 0} accounts
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                {accounts?.length || 0} accounts
               </p>
             </CardContent>
           </Card>
 
           <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Active Bots</CardTitle>
-              <Bot className="w-4 h-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Active Bots</CardTitle>
+              <Bot className="w-4 h-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">{activeBots}</div>
-              <p className="text-sm text-muted-foreground">
-                of {bots?.length || 0} total bots
+            <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+              <div className="text-lg sm:text-2xl font-bold text-foreground">{activeBots}</div>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                of {bots?.length || 0} total
               </p>
             </CardContent>
           </Card>
 
           <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Subscription</CardTitle>
-              <Activity className="w-4 h-4 text-muted-foreground" />
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 sm:p-6 sm:pb-2">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Subscription</CardTitle>
+              <Activity className="w-4 h-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground capitalize">
+            <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
+              <div className="text-lg sm:text-2xl font-bold text-foreground capitalize">
                 {user?.subscriptionTier || "Free"}
               </div>
-              <p className="text-sm text-muted-foreground">
-                {tierLimits?.aiAgents || 2} AI agents available
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                {tierLimits?.aiAgents || 2} agents
               </p>
             </CardContent>
           </Card>

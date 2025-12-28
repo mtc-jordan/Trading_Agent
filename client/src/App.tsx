@@ -20,6 +20,7 @@ import Notifications from "./pages/Notifications";
 import Community from "./pages/Community";
 import Profile from "./pages/Profile";
 import BotSchedules from "./pages/BotSchedules";
+import BotDetail from "./pages/BotDetail";
 
 function Router() {
   return (
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/community" component={Community} />
       <Route path="/profile" component={Profile} />
       <Route path="/schedules" component={BotSchedules} />
+      <Route path="/bots/:id" component={BotDetail} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

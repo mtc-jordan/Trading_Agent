@@ -20,8 +20,12 @@ import {
 import { toast } from "sonner";
 import { useState } from "react";
 
+type AccuracyTier = "all" | "elite" | "verified" | "standard" | "basic";
+
 export default function Marketplace() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [accuracyFilter, setAccuracyFilter] = useState<AccuracyTier>("all");
+  const [sortBy, setSortBy] = useState<"recent" | "accuracy" | "return" | "copies">("recent");
   
   const { data: listings, isLoading } = trpc.marketplace.list.useQuery({});
 
@@ -40,10 +44,56 @@ export default function Marketplace() {
     copyBotMutation.mutate({ listingId, accountId: 0 }); // accountId will be selected by user
   };
 
-  const filteredListings = listings?.filter(listing => 
-    listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    listing.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter and sort listings
+  const filteredListings = listings
+    ?.filter(listing => {
+      // Text search
+      const matchesSearch = 
+        listing.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        listing.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      // Accuracy filter
+      const accuracy = (listing as any).accuracyScore;
+      let matchesAccuracy = true;
+      if (accuracyFilter !== "all" && accuracy !== null && accuracy !== undefined) {
+        const score = parseFloat(accuracy.toString());
+        switch (accuracyFilter) {
+          case "elite":
+            matchesAccuracy = score >= 0.85;
+            break;
+          case "verified":
+            matchesAccuracy = score >= 0.75 && score < 0.85;
+            break;
+          case "standard":
+            matchesAccuracy = score >= 0.60 && score < 0.75;
+            break;
+          case "basic":
+            matchesAccuracy = score < 0.60;
+            break;
+        }
+      } else if (accuracyFilter !== "all" && (accuracy === null || accuracy === undefined)) {
+        matchesAccuracy = accuracyFilter === "basic"; // Unrated goes to basic
+      }
+      
+      return matchesSearch && matchesAccuracy;
+    })
+    ?.sort((a, b) => {
+      switch (sortBy) {
+        case "accuracy":
+          const aAcc = parseFloat((a as any).accuracyScore?.toString() || "0");
+          const bAcc = parseFloat((b as any).accuracyScore?.toString() || "0");
+          return bAcc - aAcc;
+        case "return":
+          const aRet = parseFloat((a as any).totalReturn?.toString() || "0");
+          const bRet = parseFloat((b as any).totalReturn?.toString() || "0");
+          return bRet - aRet;
+        case "copies":
+          return ((b as any).copyCount || 0) - ((a as any).copyCount || 0);
+        case "recent":
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -76,15 +126,60 @@ export default function Marketplace() {
           </TabsList>
 
           <TabsContent value="marketplace" className="space-y-6">
-            {/* Search */}
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search bots..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-input border-border text-foreground"
-              />
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search bots..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 bg-input border-border text-foreground"
+                />
+              </div>
+
+              {/* Accuracy Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Accuracy:</span>
+                <div className="flex gap-1">
+                  {(["all", "elite", "verified", "standard", "basic"] as AccuracyTier[]).map((tier) => (
+                    <Button
+                      key={tier}
+                      variant={accuracyFilter === tier ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setAccuracyFilter(tier)}
+                      className="capitalize text-xs"
+                    >
+                      {tier === "all" ? "All" : tier}
+                      {tier === "elite" && " 85%+"}
+                      {tier === "verified" && " 75%+"}
+                      {tier === "standard" && " 60%+"}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sort By */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">Sort:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                  className="bg-input border border-border rounded-md px-2 py-1 text-sm text-foreground"
+                >
+                  <option value="recent">Most Recent</option>
+                  <option value="accuracy">Highest Accuracy</option>
+                  <option value="return">Best Return</option>
+                  <option value="copies">Most Copied</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Results Count */}
+            <div className="text-sm text-muted-foreground">
+              Showing {filteredListings?.length || 0} bots
+              {accuracyFilter !== "all" && ` with ${accuracyFilter} accuracy`}
             </div>
 
             {/* Listings Grid */}
