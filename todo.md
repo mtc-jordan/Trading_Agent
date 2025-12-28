@@ -250,3 +250,26 @@
 - [x] Add accuracy column to marketplace leaderboard
 - [ ] Add accuracy filter to marketplace (future)
 - [ ] Show accuracy history on bot detail view (future)
+
+## Phase 21: Real Market Data Integration
+- [x] Create Yahoo Finance data fetcher service (marketData.ts)
+- [x] Integrate real-time price updates with WebSocket
+- [x] Add price caching layer for performance (5-minute cache)
+- [x] Handle API rate limits gracefully (with retry logic)
+- [x] Update Dashboard price ticker with real data
+- [x] Add error handling for API failures
+- [x] Add realtime price and quote endpoints to router
+
+## Phase 22: Bot Scheduling UI
+- [x] Create ScheduleBuilder component with visual time picker
+- [x] Create interval selector (once, hourly, daily, weekly, monthly, custom/cron)
+- [x] Create day-of-week selector for weekly schedules
+- [x] Create time-of-day picker for scheduled runs
+- [x] Build BotSchedules page with schedule list
+- [x] Add schedule CRUD operations (create, edit, delete)
+- [x] Add schedule enable/disable toggle
+- [x] Show next run time calculation
+- [x] Add schedule history/logs view (execution history tab)
+- [x] Integrate with existing bot_schedules table
+- [x] Add timezone selection for schedules
+- [x] Add Schedules navigation to sidebar

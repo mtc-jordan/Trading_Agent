@@ -22,6 +22,7 @@ import {
 } from "./services/llmProvider";
 import { runBacktest, BacktestConfig } from "./services/backtesting";
 import { callDataApi } from "./_core/dataApi";
+import { getStockQuote, searchStocks, getCachedPrice, getAllCachedPrices, fetchStockPrice } from "./services/marketData";
 import { createCheckoutSession, createCustomerPortalSession } from "./stripe/checkout";
 import { SUBSCRIPTION_TIERS, SubscriptionTier } from "./stripe/products";
 
@@ -437,6 +438,54 @@ export const appRouter = router({
           query: { symbol: input.symbol, region: "US", lang: "en-US" },
         });
         return response;
+      }),
+
+    // Real-time price endpoints
+    getQuote: publicProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ input }) => {
+        return getStockQuote(input.symbol);
+      }),
+
+    getLivePrice: publicProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ input }) => {
+        // Try cache first, then fetch
+        const cached = getCachedPrice(input.symbol);
+        if (cached) return cached;
+        return fetchStockPrice(input.symbol);
+      }),
+
+    getLivePrices: publicProcedure
+      .input(z.object({ symbols: z.array(z.string()) }))
+      .query(async ({ input }) => {
+        const results: Record<string, any> = {};
+        for (const symbol of input.symbols) {
+          const cached = getCachedPrice(symbol);
+          if (cached) {
+            results[symbol] = cached;
+          } else {
+            const price = await fetchStockPrice(symbol);
+            if (price) results[symbol] = price;
+          }
+        }
+        return results;
+      }),
+
+    getCachedPrices: publicProcedure
+      .query(async () => {
+        const cached = getAllCachedPrices();
+        const result: Record<string, any> = {};
+        cached.forEach((value, key) => {
+          result[key] = value;
+        });
+        return result;
+      }),
+
+    search: publicProcedure
+      .input(z.object({ query: z.string() }))
+      .query(async ({ input }) => {
+        return searchStocks(input.query);
       }),
   }),
 
@@ -1295,6 +1344,21 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         await db.deleteBotSchedule(input.id);
         return { success: true };
+      }),
+
+    // Toggle schedule active status
+    toggle: protectedProcedure
+      .input(z.object({ id: z.number(), enabled: z.boolean() }))
+      .mutation(async ({ input }) => {
+        await db.updateBotSchedule(input.id, { isActive: input.enabled });
+        return { success: true };
+      }),
+
+    // Get execution logs
+    getExecutionLogs: protectedProcedure
+      .input(z.object({ botId: z.number().optional(), limit: z.number().default(50) }))
+      .query(async ({ ctx, input }) => {
+        return db.getBotExecutionLogs(input.botId, ctx.user.id, input.limit);
       }),
   }),
 

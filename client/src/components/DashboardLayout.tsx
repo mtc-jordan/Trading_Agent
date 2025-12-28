@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Brain, Bot, LineChart, Briefcase, Store, Settings, Shield, History, Target, Bell, MessageSquare, User, Clock } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -33,6 +33,7 @@ const menuItems = [
   { icon: History, label: "Analysis History", path: "/analysis-history" },
   { icon: Target, label: "Accuracy", path: "/accuracy" },
   { icon: Bot, label: "Trading Bots", path: "/bots" },
+  { icon: Clock, label: "Schedules", path: "/schedules" },
   { icon: LineChart, label: "Backtest", path: "/backtest" },
   { icon: Briefcase, label: "Portfolio", path: "/portfolio" },
   { icon: Store, label: "Marketplace", path: "/marketplace" },

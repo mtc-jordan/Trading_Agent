@@ -19,6 +19,7 @@ import AccuracyDashboard from "./pages/AccuracyDashboard";
 import Notifications from "./pages/Notifications";
 import Community from "./pages/Community";
 import Profile from "./pages/Profile";
+import BotSchedules from "./pages/BotSchedules";
 
 function Router() {
   return (
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/notifications" component={Notifications} />
       <Route path="/community" component={Community} />
       <Route path="/profile" component={Profile} />
+      <Route path="/schedules" component={BotSchedules} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

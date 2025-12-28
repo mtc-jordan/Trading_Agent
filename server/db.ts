@@ -1361,11 +1361,27 @@ export async function createBotExecutionLog(data: InsertBotExecutionLog): Promis
   return result[0].insertId;
 }
 
-export async function getBotExecutionLogs(botId: number, limit = 100): Promise<BotExecutionLog[]> {
+export async function getBotExecutionLogs(botId: number | undefined, userId: number, limit = 100): Promise<BotExecutionLog[]> {
   const db = await getDb();
   if (!db) return [];
+  
+  // If botId is provided, filter by it; otherwise get all logs for user's bots
+  if (botId) {
+    return db.select().from(botExecutionLogs)
+      .where(eq(botExecutionLogs.botId, botId))
+      .orderBy(desc(botExecutionLogs.startedAt))
+      .limit(limit);
+  }
+  
+  // Get all bots for user and their logs
+  const userBots = await db.select({ id: tradingBots.id }).from(tradingBots)
+    .where(eq(tradingBots.userId, userId));
+  
+  if (userBots.length === 0) return [];
+  
+  const botIds = userBots.map(b => b.id);
   return db.select().from(botExecutionLogs)
-    .where(eq(botExecutionLogs.botId, botId))
+    .where(inArray(botExecutionLogs.botId, botIds))
     .orderBy(desc(botExecutionLogs.startedAt))
     .limit(limit);
 }

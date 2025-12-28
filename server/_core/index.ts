@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { initializeWebSocket } from "./websocket";
+import { startMarketDataService } from "../services/marketData";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -53,6 +54,9 @@ async function startServer() {
 
   // Initialize WebSocket server
   initializeWebSocket(server);
+
+  // Start real-time market data service
+  startMarketDataService();
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);

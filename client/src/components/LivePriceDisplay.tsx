@@ -19,7 +19,7 @@ export function LivePriceDisplay({
   className,
 }: LivePriceDisplayProps) {
   const symbols = useMemo(() => [symbol.toUpperCase()], [symbol]);
-  const prices = usePriceSubscription(symbols);
+  const { prices } = usePriceSubscription(symbols);
   const priceData = prices.get(symbol.toUpperCase());
   const [flash, setFlash] = useState<"up" | "down" | null>(null);
   const [prevPrice, setPrevPrice] = useState<number | null>(null);
@@ -125,7 +125,7 @@ interface PriceTickerProps {
 }
 
 export function PriceTicker({ symbols, className }: PriceTickerProps) {
-  const prices = usePriceSubscription(symbols);
+  const { prices, isLoading } = usePriceSubscription(symbols);
 
   return (
     <div className={cn("flex items-center gap-4 overflow-x-auto", className)}>
@@ -172,7 +172,7 @@ interface PriceBadgeProps {
 
 export function PriceBadge({ symbol, className }: PriceBadgeProps) {
   const symbols = useMemo(() => [symbol.toUpperCase()], [symbol]);
-  const prices = usePriceSubscription(symbols);
+  const { prices } = usePriceSubscription(symbols);
   const data = prices.get(symbol.toUpperCase());
 
   if (!data) {

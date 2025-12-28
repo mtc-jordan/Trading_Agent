@@ -297,7 +297,36 @@ export function useSocket(): UseSocketReturn {
 export function usePriceSubscription(symbols: string[]) {
   const { subscribeToPrices, unsubscribeFromPrices, onPriceUpdate, isConnected } = useSocket();
   const [prices, setPrices] = useState<Map<string, PriceUpdate>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch initial prices from API
+  useEffect(() => {
+    if (symbols.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    
+    // Fetch initial prices via API
+    fetch(`/api/trpc/market.getLivePrices?input=${encodeURIComponent(JSON.stringify({ symbols }))}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.result?.data) {
+          const newPrices = new Map<string, PriceUpdate>();
+          Object.entries(data.result.data).forEach(([symbol, priceData]: [string, any]) => {
+            if (priceData) {
+              newPrices.set(symbol.toUpperCase(), priceData);
+            }
+          });
+          setPrices(newPrices);
+        }
+      })
+      .catch(err => console.error("Failed to fetch initial prices:", err))
+      .finally(() => setIsLoading(false));
+  }, [symbols.join(",")]);
+
+  // Subscribe to real-time updates
   useEffect(() => {
     if (!isConnected || symbols.length === 0) return;
 
@@ -315,7 +344,7 @@ export function usePriceSubscription(symbols: string[]) {
     };
   }, [isConnected, symbols.join(","), subscribeToPrices, unsubscribeFromPrices, onPriceUpdate]);
 
-  return prices;
+  return { prices, isLoading };
 }
 
 // Hook for subscribing to bot execution status
