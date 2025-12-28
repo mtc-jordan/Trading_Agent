@@ -15,6 +15,10 @@ import Admin from "./pages/Admin";
 import Pricing from "./pages/Pricing";
 import Settings from "./pages/Settings";
 import AnalysisHistory from "./pages/AnalysisHistory";
+import AccuracyDashboard from "./pages/AccuracyDashboard";
+import Notifications from "./pages/Notifications";
+import Community from "./pages/Community";
+import Profile from "./pages/Profile";
 
 function Router() {
   return (
@@ -30,6 +34,10 @@ function Router() {
       <Route path="/admin" component={Admin} />
       <Route path="/settings" component={Settings} />
       <Route path="/analysis-history" component={AnalysisHistory} />
+      <Route path="/accuracy" component={AccuracyDashboard} />
+      <Route path="/notifications" component={Notifications} />
+      <Route path="/community" component={Community} />
+      <Route path="/profile" component={Profile} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

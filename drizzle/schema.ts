@@ -454,3 +454,541 @@ export const llmPricing = {
 } as const;
 
 // LlmProvider type is already defined above from llmProviderConfigs
+
+
+// ============================================
+// PHASE 14: Performance Tracking & Accuracy
+// ============================================
+
+/**
+ * Price Tracking - tracks actual price movements after AI recommendations
+ */
+export const priceTracking = mysqlTable("price_tracking", {
+  id: int("id").autoincrement().primaryKey(),
+  analysisId: int("analysisId").notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  // Price at recommendation time
+  priceAtRecommendation: decimal("priceAtRecommendation", { precision: 18, scale: 6 }).notNull(),
+  recommendedAction: mysqlEnum("recommendedAction", ["strong_buy", "buy", "hold", "sell", "strong_sell"]).notNull(),
+  confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(),
+  // Tracked prices over time
+  price1Day: decimal("price1Day", { precision: 18, scale: 6 }),
+  price3Day: decimal("price3Day", { precision: 18, scale: 6 }),
+  price7Day: decimal("price7Day", { precision: 18, scale: 6 }),
+  price14Day: decimal("price14Day", { precision: 18, scale: 6 }),
+  price30Day: decimal("price30Day", { precision: 18, scale: 6 }),
+  // Calculated returns
+  return1Day: decimal("return1Day", { precision: 10, scale: 4 }),
+  return3Day: decimal("return3Day", { precision: 10, scale: 4 }),
+  return7Day: decimal("return7Day", { precision: 10, scale: 4 }),
+  return14Day: decimal("return14Day", { precision: 10, scale: 4 }),
+  return30Day: decimal("return30Day", { precision: 10, scale: 4 }),
+  // Accuracy flags
+  wasAccurate1Day: boolean("wasAccurate1Day"),
+  wasAccurate7Day: boolean("wasAccurate7Day"),
+  wasAccurate30Day: boolean("wasAccurate30Day"),
+  // Timestamps
+  recommendedAt: timestamp("recommendedAt").notNull(),
+  lastUpdatedAt: timestamp("lastUpdatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PriceTracking = typeof priceTracking.$inferSelect;
+export type InsertPriceTracking = typeof priceTracking.$inferInsert;
+
+/**
+ * Prediction Accuracy - aggregated accuracy metrics per agent and overall
+ */
+export const predictionAccuracy = mysqlTable("prediction_accuracy", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId"),
+  // Scope
+  agentType: mysqlEnum("agentType", ["technical", "fundamental", "sentiment", "risk", "microstructure", "macro", "quant", "consensus"]),
+  symbol: varchar("symbol", { length: 20 }), // NULL for overall
+  timeframe: mysqlEnum("timeframe", ["1day", "7day", "30day"]).notNull(),
+  // Metrics
+  totalPredictions: int("totalPredictions").default(0).notNull(),
+  correctPredictions: int("correctPredictions").default(0).notNull(),
+  accuracyRate: decimal("accuracyRate", { precision: 5, scale: 4 }),
+  avgConfidence: decimal("avgConfidence", { precision: 5, scale: 4 }),
+  avgReturn: decimal("avgReturn", { precision: 10, scale: 4 }),
+  // By action type
+  buyAccuracy: decimal("buyAccuracy", { precision: 5, scale: 4 }),
+  sellAccuracy: decimal("sellAccuracy", { precision: 5, scale: 4 }),
+  holdAccuracy: decimal("holdAccuracy", { precision: 5, scale: 4 }),
+  // Period
+  periodStart: timestamp("periodStart").notNull(),
+  periodEnd: timestamp("periodEnd").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PredictionAccuracy = typeof predictionAccuracy.$inferSelect;
+export type InsertPredictionAccuracy = typeof predictionAccuracy.$inferInsert;
+
+// ============================================
+// PHASE 15: Saved Comparisons & Watchlists
+// ============================================
+
+/**
+ * Saved Comparisons - user's saved analysis comparison sets
+ */
+export const savedComparisons = mysqlTable("saved_comparisons", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  analysisIds: json("analysisIds").notNull(), // Array of analysis IDs
+  // Metadata
+  symbolsIncluded: json("symbolsIncluded"), // Array of symbols for quick filtering
+  dateRange: json("dateRange"), // { start, end }
+  isPinned: boolean("isPinned").default(false).notNull(),
+  lastViewedAt: timestamp("lastViewedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SavedComparison = typeof savedComparisons.$inferSelect;
+export type InsertSavedComparison = typeof savedComparisons.$inferInsert;
+
+/**
+ * Watchlist Alerts - alerts for recommendation changes
+ */
+export const watchlistAlerts = mysqlTable("watchlist_alerts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  // Alert settings
+  alertOnRecommendationChange: boolean("alertOnRecommendationChange").default(true).notNull(),
+  alertOnConfidenceChange: boolean("alertOnConfidenceChange").default(false).notNull(),
+  confidenceThreshold: decimal("confidenceThreshold", { precision: 5, scale: 4 }).default("0.1"), // Alert if confidence changes by this much
+  alertOnPriceTarget: boolean("alertOnPriceTarget").default(false).notNull(),
+  priceTargetHigh: decimal("priceTargetHigh", { precision: 18, scale: 6 }),
+  priceTargetLow: decimal("priceTargetLow", { precision: 18, scale: 6 }),
+  // Notification preferences
+  emailNotification: boolean("emailNotification").default(true).notNull(),
+  pushNotification: boolean("pushNotification").default(true).notNull(),
+  // Last known state
+  lastRecommendation: mysqlEnum("lastRecommendation", ["strong_buy", "buy", "hold", "sell", "strong_sell"]),
+  lastConfidence: decimal("lastConfidence", { precision: 5, scale: 4 }),
+  lastPrice: decimal("lastPrice", { precision: 18, scale: 6 }),
+  lastAlertAt: timestamp("lastAlertAt"),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type WatchlistAlert = typeof watchlistAlerts.$inferSelect;
+export type InsertWatchlistAlert = typeof watchlistAlerts.$inferInsert;
+
+/**
+ * Alert History - log of sent alerts
+ */
+export const alertHistory = mysqlTable("alert_history", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  alertId: int("alertId").notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  alertType: mysqlEnum("alertType", ["recommendation_change", "confidence_change", "price_target", "bot_status", "analysis_complete"]).notNull(),
+  // Alert content
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  // Previous and new values
+  previousValue: varchar("previousValue", { length: 100 }),
+  newValue: varchar("newValue", { length: 100 }),
+  // Delivery status
+  emailSent: boolean("emailSent").default(false).notNull(),
+  pushSent: boolean("pushSent").default(false).notNull(),
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AlertHistory = typeof alertHistory.$inferSelect;
+export type InsertAlertHistory = typeof alertHistory.$inferInsert;
+
+// ============================================
+// PHASE 16: Real-Time Features
+// ============================================
+
+/**
+ * User Notifications - in-app notification center
+ */
+export const userNotifications = mysqlTable("user_notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  type: mysqlEnum("type", ["info", "success", "warning", "error", "alert", "trade", "analysis", "social"]).notNull(),
+  category: mysqlEnum("category", ["system", "trading", "analysis", "social", "billing"]).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  // Action link
+  actionUrl: varchar("actionUrl", { length: 500 }),
+  actionLabel: varchar("actionLabel", { length: 100 }),
+  // Related entities
+  relatedEntityType: varchar("relatedEntityType", { length: 50 }),
+  relatedEntityId: int("relatedEntityId"),
+  // Status
+  isRead: boolean("isRead").default(false).notNull(),
+  readAt: timestamp("readAt"),
+  isPinned: boolean("isPinned").default(false).notNull(),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserNotification = typeof userNotifications.$inferSelect;
+export type InsertUserNotification = typeof userNotifications.$inferInsert;
+
+/**
+ * Real-time Subscriptions - tracks what users are subscribed to for live updates
+ */
+export const realtimeSubscriptions = mysqlTable("realtime_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  socketId: varchar("socketId", { length: 100 }),
+  subscriptionType: mysqlEnum("subscriptionType", ["price", "portfolio", "bot_status", "analysis", "notifications"]).notNull(),
+  // Subscription target
+  symbols: json("symbols"), // Array of symbols for price subscriptions
+  botIds: json("botIds"), // Array of bot IDs for bot status
+  accountIds: json("accountIds"), // Array of account IDs for portfolio
+  // Status
+  isActive: boolean("isActive").default(true).notNull(),
+  lastHeartbeat: timestamp("lastHeartbeat"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RealtimeSubscription = typeof realtimeSubscriptions.$inferSelect;
+export type InsertRealtimeSubscription = typeof realtimeSubscriptions.$inferInsert;
+
+// ============================================
+// PHASE 17: Advanced Bot Features
+// ============================================
+
+/**
+ * Bot Schedules - scheduling for automated bot execution
+ */
+export const botSchedules = mysqlTable("bot_schedules", {
+  id: int("id").autoincrement().primaryKey(),
+  botId: int("botId").notNull(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  // Schedule type
+  scheduleType: mysqlEnum("scheduleType", ["once", "daily", "weekly", "monthly", "cron"]).notNull(),
+  // Schedule details
+  cronExpression: varchar("cronExpression", { length: 100 }), // For cron type
+  runTime: varchar("runTime", { length: 10 }), // HH:MM format for daily
+  daysOfWeek: json("daysOfWeek"), // Array of days (0-6) for weekly
+  dayOfMonth: int("dayOfMonth"), // For monthly
+  timezone: varchar("timezone", { length: 50 }).default("UTC").notNull(),
+  // Execution settings
+  maxExecutionTime: int("maxExecutionTime").default(300), // seconds
+  retryOnFailure: boolean("retryOnFailure").default(true).notNull(),
+  maxRetries: int("maxRetries").default(3),
+  // Status
+  isActive: boolean("isActive").default(true).notNull(),
+  lastRunAt: timestamp("lastRunAt"),
+  nextRunAt: timestamp("nextRunAt"),
+  lastRunStatus: mysqlEnum("lastRunStatus", ["success", "failed", "timeout", "skipped"]),
+  lastRunError: text("lastRunError"),
+  totalRuns: int("totalRuns").default(0).notNull(),
+  successfulRuns: int("successfulRuns").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BotSchedule = typeof botSchedules.$inferSelect;
+export type InsertBotSchedule = typeof botSchedules.$inferInsert;
+
+/**
+ * Bot Risk Rules - risk management rules for bots
+ */
+export const botRiskRules = mysqlTable("bot_risk_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  botId: int("botId").notNull(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  ruleType: mysqlEnum("ruleType", ["stop_loss", "take_profit", "trailing_stop", "max_position", "max_daily_loss", "max_drawdown", "position_sizing"]).notNull(),
+  // Rule parameters
+  triggerValue: decimal("triggerValue", { precision: 18, scale: 6 }), // Percentage or absolute value
+  triggerType: mysqlEnum("triggerType", ["percentage", "absolute", "atr_multiple"]).default("percentage"),
+  // Position sizing
+  positionSizeType: mysqlEnum("positionSizeType", ["fixed", "percentage", "risk_based"]),
+  positionSizeValue: decimal("positionSizeValue", { precision: 18, scale: 6 }),
+  maxPositionSize: decimal("maxPositionSize", { precision: 18, scale: 6 }),
+  // Action on trigger
+  actionOnTrigger: mysqlEnum("actionOnTrigger", ["close_position", "reduce_position", "pause_bot", "notify_only"]).default("close_position"),
+  reduceByPercentage: decimal("reduceByPercentage", { precision: 5, scale: 2 }),
+  // Status
+  isActive: boolean("isActive").default(true).notNull(),
+  triggeredCount: int("triggeredCount").default(0).notNull(),
+  lastTriggeredAt: timestamp("lastTriggeredAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BotRiskRule = typeof botRiskRules.$inferSelect;
+export type InsertBotRiskRule = typeof botRiskRules.$inferInsert;
+
+/**
+ * Bot Execution Logs - detailed logs of bot executions
+ */
+export const botExecutionLogs = mysqlTable("bot_execution_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  botId: int("botId").notNull(),
+  userId: int("userId").notNull(),
+  scheduleId: int("scheduleId"),
+  // Execution info
+  executionType: mysqlEnum("executionType", ["scheduled", "manual", "triggered"]).notNull(),
+  status: mysqlEnum("status", ["running", "completed", "failed", "timeout", "cancelled"]).notNull(),
+  // Timing
+  startedAt: timestamp("startedAt").notNull(),
+  completedAt: timestamp("completedAt"),
+  durationMs: int("durationMs"),
+  // Results
+  symbolsAnalyzed: json("symbolsAnalyzed"),
+  tradesExecuted: int("tradesExecuted").default(0),
+  ordersPlaced: int("ordersPlaced").default(0),
+  // AI Analysis
+  analysisResults: json("analysisResults"), // Summary of AI consensus
+  // Errors
+  errorMessage: text("errorMessage"),
+  errorStack: text("errorStack"),
+  // Performance
+  pnlResult: decimal("pnlResult", { precision: 18, scale: 6 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BotExecutionLog = typeof botExecutionLogs.$inferSelect;
+export type InsertBotExecutionLog = typeof botExecutionLogs.$inferInsert;
+
+/**
+ * Bot Benchmarks - performance comparison vs benchmarks
+ */
+export const botBenchmarks = mysqlTable("bot_benchmarks", {
+  id: int("id").autoincrement().primaryKey(),
+  botId: int("botId").notNull(),
+  userId: int("userId").notNull(),
+  // Benchmark
+  benchmarkSymbol: varchar("benchmarkSymbol", { length: 20 }).default("SPY").notNull(), // S&P 500 ETF
+  // Period
+  periodStart: timestamp("periodStart").notNull(),
+  periodEnd: timestamp("periodEnd").notNull(),
+  periodDays: int("periodDays").notNull(),
+  // Bot performance
+  botReturn: decimal("botReturn", { precision: 10, scale: 4 }).notNull(),
+  botSharpe: decimal("botSharpe", { precision: 10, scale: 4 }),
+  botMaxDrawdown: decimal("botMaxDrawdown", { precision: 10, scale: 4 }),
+  botWinRate: decimal("botWinRate", { precision: 5, scale: 4 }),
+  botTotalTrades: int("botTotalTrades"),
+  // Benchmark performance
+  benchmarkReturn: decimal("benchmarkReturn", { precision: 10, scale: 4 }).notNull(),
+  benchmarkSharpe: decimal("benchmarkSharpe", { precision: 10, scale: 4 }),
+  benchmarkMaxDrawdown: decimal("benchmarkMaxDrawdown", { precision: 10, scale: 4 }),
+  // Comparison
+  alpha: decimal("alpha", { precision: 10, scale: 4 }), // Excess return vs benchmark
+  beta: decimal("beta", { precision: 10, scale: 4 }), // Correlation with benchmark
+  informationRatio: decimal("informationRatio", { precision: 10, scale: 4 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BotBenchmark = typeof botBenchmarks.$inferSelect;
+export type InsertBotBenchmark = typeof botBenchmarks.$inferInsert;
+
+// ============================================
+// PHASE 18: Social & Community
+// ============================================
+
+/**
+ * User Profiles - extended profile with trading stats
+ */
+export const userProfiles = mysqlTable("user_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  // Profile info
+  displayName: varchar("displayName", { length: 100 }),
+  bio: text("bio"),
+  avatarUrl: varchar("avatarUrl", { length: 500 }),
+  location: varchar("location", { length: 100 }),
+  website: varchar("website", { length: 255 }),
+  twitterHandle: varchar("twitterHandle", { length: 50 }),
+  // Privacy settings
+  isPublic: boolean("isPublic").default(true).notNull(),
+  showTradingStats: boolean("showTradingStats").default(true).notNull(),
+  showPortfolio: boolean("showPortfolio").default(false).notNull(),
+  allowFollowers: boolean("allowFollowers").default(true).notNull(),
+  // Trading stats (aggregated)
+  totalTrades: int("totalTrades").default(0).notNull(),
+  winRate: decimal("winRate", { precision: 5, scale: 4 }),
+  totalReturn: decimal("totalReturn", { precision: 10, scale: 4 }),
+  avgReturn: decimal("avgReturn", { precision: 10, scale: 4 }),
+  bestTrade: decimal("bestTrade", { precision: 10, scale: 4 }),
+  worstTrade: decimal("worstTrade", { precision: 10, scale: 4 }),
+  sharpeRatio: decimal("sharpeRatio", { precision: 10, scale: 4 }),
+  // Social stats
+  followersCount: int("followersCount").default(0).notNull(),
+  followingCount: int("followingCount").default(0).notNull(),
+  strategiesShared: int("strategiesShared").default(0).notNull(),
+  // Reputation
+  reputationScore: int("reputationScore").default(0).notNull(),
+  badges: json("badges"), // Array of badge IDs
+  // Activity
+  lastActiveAt: timestamp("lastActiveAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserProfile = typeof userProfiles.$inferSelect;
+export type InsertUserProfile = typeof userProfiles.$inferInsert;
+
+/**
+ * User Follows - follow relationships between users
+ */
+export const userFollows = mysqlTable("user_follows", {
+  id: int("id").autoincrement().primaryKey(),
+  followerId: int("followerId").notNull(), // User who is following
+  followingId: int("followingId").notNull(), // User being followed
+  // Notification preferences
+  notifyOnTrade: boolean("notifyOnTrade").default(false).notNull(),
+  notifyOnAnalysis: boolean("notifyOnAnalysis").default(true).notNull(),
+  notifyOnStrategy: boolean("notifyOnStrategy").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserFollow = typeof userFollows.$inferSelect;
+export type InsertUserFollow = typeof userFollows.$inferInsert;
+
+/**
+ * Discussion Threads - discussions on analyses and strategies
+ */
+export const discussionThreads = mysqlTable("discussion_threads", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(), // Author
+  // Thread type and target
+  threadType: mysqlEnum("threadType", ["analysis", "strategy", "bot", "general", "market"]).notNull(),
+  relatedEntityId: int("relatedEntityId"), // Analysis ID, Bot ID, etc.
+  symbol: varchar("symbol", { length: 20 }),
+  // Content
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  // Engagement
+  viewCount: int("viewCount").default(0).notNull(),
+  likeCount: int("likeCount").default(0).notNull(),
+  commentCount: int("commentCount").default(0).notNull(),
+  // Status
+  isPinned: boolean("isPinned").default(false).notNull(),
+  isLocked: boolean("isLocked").default(false).notNull(),
+  isDeleted: boolean("isDeleted").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DiscussionThread = typeof discussionThreads.$inferSelect;
+export type InsertDiscussionThread = typeof discussionThreads.$inferInsert;
+
+/**
+ * Discussion Comments - comments on threads
+ */
+export const discussionComments = mysqlTable("discussion_comments", {
+  id: int("id").autoincrement().primaryKey(),
+  threadId: int("threadId").notNull(),
+  userId: int("userId").notNull(),
+  parentCommentId: int("parentCommentId"), // For nested replies
+  // Content
+  content: text("content").notNull(),
+  // Engagement
+  likeCount: int("likeCount").default(0).notNull(),
+  // Status
+  isEdited: boolean("isEdited").default(false).notNull(),
+  isDeleted: boolean("isDeleted").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DiscussionComment = typeof discussionComments.$inferSelect;
+export type InsertDiscussionComment = typeof discussionComments.$inferInsert;
+
+/**
+ * Strategy Ratings - ratings and reviews for shared strategies
+ */
+export const strategyRatings = mysqlTable("strategy_ratings", {
+  id: int("id").autoincrement().primaryKey(),
+  listingId: int("listingId").notNull(), // Marketplace listing
+  userId: int("userId").notNull(),
+  // Rating
+  rating: int("rating").notNull(), // 1-5 stars
+  review: text("review"),
+  // Helpful votes
+  helpfulCount: int("helpfulCount").default(0).notNull(),
+  // Status
+  isVerifiedPurchase: boolean("isVerifiedPurchase").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type StrategyRating = typeof strategyRatings.$inferSelect;
+export type InsertStrategyRating = typeof strategyRatings.$inferInsert;
+
+/**
+ * Activity Feed - user activity for social feed
+ */
+export const activityFeed = mysqlTable("activity_feed", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  activityType: mysqlEnum("activityType", ["trade", "analysis", "strategy_share", "follow", "comment", "like", "achievement", "bot_created"]).notNull(),
+  // Activity details
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  // Related entities
+  relatedEntityType: varchar("relatedEntityType", { length: 50 }),
+  relatedEntityId: int("relatedEntityId"),
+  symbol: varchar("symbol", { length: 20 }),
+  // Visibility
+  isPublic: boolean("isPublic").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ActivityFeed = typeof activityFeed.$inferSelect;
+export type InsertActivityFeed = typeof activityFeed.$inferInsert;
+
+/**
+ * User Badges - achievement badges
+ */
+export const userBadges = mysqlTable("user_badges", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  badgeId: varchar("badgeId", { length: 50 }).notNull(),
+  // Badge info
+  badgeName: varchar("badgeName", { length: 100 }).notNull(),
+  badgeDescription: text("badgeDescription"),
+  badgeIcon: varchar("badgeIcon", { length: 100 }),
+  badgeColor: varchar("badgeColor", { length: 20 }),
+  // Achievement
+  earnedAt: timestamp("earnedAt").defaultNow().notNull(),
+  earnedReason: text("earnedReason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type UserBadge = typeof userBadges.$inferSelect;
+export type InsertUserBadge = typeof userBadges.$inferInsert;
+
+/**
+ * Badge Definitions - available badges
+ */
+export const badgeDefinitions = {
+  first_trade: { name: "First Trade", description: "Completed your first trade", icon: "trophy", color: "bronze" },
+  profitable_week: { name: "Profitable Week", description: "Had a profitable trading week", icon: "trending-up", color: "green" },
+  profitable_month: { name: "Profitable Month", description: "Had a profitable trading month", icon: "calendar-check", color: "gold" },
+  accuracy_80: { name: "Sharp Shooter", description: "Achieved 80%+ prediction accuracy", icon: "target", color: "purple" },
+  accuracy_90: { name: "Master Predictor", description: "Achieved 90%+ prediction accuracy", icon: "bullseye", color: "diamond" },
+  bot_creator: { name: "Bot Creator", description: "Created your first trading bot", icon: "robot", color: "blue" },
+  strategy_sharer: { name: "Strategy Sharer", description: "Shared a strategy on marketplace", icon: "share", color: "teal" },
+  top_performer: { name: "Top Performer", description: "Ranked in top 10% of traders", icon: "crown", color: "gold" },
+  community_helper: { name: "Community Helper", description: "Received 50+ helpful votes", icon: "heart", color: "red" },
+  early_adopter: { name: "Early Adopter", description: "Joined during beta", icon: "rocket", color: "orange" },
+  whale: { name: "Whale", description: "Portfolio value over $1M", icon: "fish", color: "blue" },
+  streak_7: { name: "Week Warrior", description: "7-day profitable streak", icon: "flame", color: "orange" },
+  streak_30: { name: "Month Master", description: "30-day profitable streak", icon: "fire", color: "red" },
+  diversified: { name: "Diversified", description: "Traded 20+ different symbols", icon: "pie-chart", color: "purple" },
+  risk_manager: { name: "Risk Manager", description: "Never exceeded 5% drawdown", icon: "shield", color: "green" },
+} as const;
+
+export type BadgeId = keyof typeof badgeDefinitions;

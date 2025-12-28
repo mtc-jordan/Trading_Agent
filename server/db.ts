@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, lte, sql, like } from "drizzle-orm";
+import { eq, and, desc, gte, lte, sql, like, or, inArray, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -14,7 +14,31 @@ import {
   subscriptionTierLimits, SubscriptionTier,
   userLlmSettings, InsertUserLlmSettings, UserLlmSettings,
   llmUsageLogs, InsertLlmUsageLog, LlmUsageLog,
-  userFallbackSettings, InsertUserFallbackSettings, UserFallbackSettings
+  userFallbackSettings, InsertUserFallbackSettings, UserFallbackSettings,
+  // Phase 14: Performance Tracking
+  priceTracking, InsertPriceTracking, PriceTracking,
+  predictionAccuracy, InsertPredictionAccuracy, PredictionAccuracy,
+  // Phase 15: Saved Comparisons & Watchlists
+  savedComparisons, InsertSavedComparison, SavedComparison,
+  watchlistAlerts, InsertWatchlistAlert, WatchlistAlert,
+  alertHistory, InsertAlertHistory, AlertHistory,
+  // Phase 16: Real-Time Features
+  userNotifications, InsertUserNotification, UserNotification,
+  realtimeSubscriptions, InsertRealtimeSubscription, RealtimeSubscription,
+  // Phase 17: Advanced Bot Features
+  botSchedules, InsertBotSchedule, BotSchedule,
+  botRiskRules, InsertBotRiskRule, BotRiskRule,
+  botExecutionLogs, InsertBotExecutionLog, BotExecutionLog,
+  botBenchmarks, InsertBotBenchmark, BotBenchmark,
+  // Phase 18: Social & Community
+  userProfiles, InsertUserProfile, UserProfile,
+  userFollows, InsertUserFollow, UserFollow,
+  discussionThreads, InsertDiscussionThread, DiscussionThread,
+  discussionComments, InsertDiscussionComment, DiscussionComment,
+  strategyRatings, InsertStrategyRating, StrategyRating,
+  activityFeed, InsertActivityFeed, ActivityFeed,
+  userBadges, InsertUserBadge, UserBadge,
+  badgeDefinitions, BadgeId
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -996,4 +1020,690 @@ export async function getAdminLlmUsageStats(): Promise<{
     byProvider,
     topUsers,
   };
+}
+
+
+// ==================== PHASE 14: PERFORMANCE TRACKING & ACCURACY ====================
+
+export async function createPriceTracking(data: InsertPriceTracking): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(priceTracking).values(data);
+  return result[0].insertId;
+}
+
+export async function getPriceTrackingByAnalysis(analysisId: number): Promise<PriceTracking | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(priceTracking)
+    .where(eq(priceTracking.analysisId, analysisId))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updatePriceTracking(id: number, data: Partial<InsertPriceTracking>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(priceTracking).set({ ...data, lastUpdatedAt: new Date() })
+    .where(eq(priceTracking.id, id));
+}
+
+export async function getPendingPriceTrackings(): Promise<PriceTracking[]> {
+  const db = await getDb();
+  if (!db) return [];
+  // Get price trackings that haven't been fully tracked yet (missing 30-day price)
+  return db.select().from(priceTracking)
+    .where(sql`price_30_day IS NULL`)
+    .orderBy(asc(priceTracking.createdAt));
+}
+
+export async function createPredictionAccuracy(data: InsertPredictionAccuracy): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(predictionAccuracy).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserPredictionAccuracy(userId: number): Promise<PredictionAccuracy[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(predictionAccuracy)
+    .where(eq(predictionAccuracy.userId, userId))
+    .orderBy(desc(predictionAccuracy.updatedAt));
+}
+
+export async function getAgentAccuracyStats(userId: number): Promise<{
+  overall: { correct: number; total: number; accuracy: number };
+  byAgent: Record<string, { correct: number; total: number; accuracy: number }>;
+  byTimeframe: Record<string, { correct: number; total: number; accuracy: number }>;
+}> {
+  const db = await getDb();
+  if (!db) return { overall: { correct: 0, total: 0, accuracy: 0 }, byAgent: {}, byTimeframe: {} };
+  
+  const records = await db.select().from(predictionAccuracy)
+    .where(eq(predictionAccuracy.userId, userId));
+  
+  let totalCorrect = 0;
+  let totalCount = 0;
+  const byAgent: Record<string, { correct: number; total: number }> = {};
+  const byTimeframe: Record<string, { correct: number; total: number }> = {};
+  
+  for (const record of records) {
+    totalCount += record.totalPredictions;
+    totalCorrect += record.correctPredictions;
+    
+    // By agent
+    const agentKey = record.agentType || 'consensus';
+    if (!byAgent[agentKey]) {
+      byAgent[agentKey] = { correct: 0, total: 0 };
+    }
+    byAgent[agentKey].total += record.totalPredictions;
+    byAgent[agentKey].correct += record.correctPredictions;
+    
+    // By timeframe
+    const tfKey = record.timeframe;
+    if (!byTimeframe[tfKey]) {
+      byTimeframe[tfKey] = { correct: 0, total: 0 };
+    }
+    byTimeframe[tfKey].total += record.totalPredictions;
+    byTimeframe[tfKey].correct += record.correctPredictions;
+  }
+  
+  const calcAccuracy = (c: number, t: number) => t > 0 ? Math.round((c / t) * 100) : 0;
+  
+  return {
+    overall: { correct: totalCorrect, total: totalCount, accuracy: calcAccuracy(totalCorrect, totalCount) },
+    byAgent: Object.fromEntries(
+      Object.entries(byAgent).map(([k, v]) => [k, { ...v, accuracy: calcAccuracy(v.correct, v.total) }])
+    ),
+    byTimeframe: Object.fromEntries(
+      Object.entries(byTimeframe).map(([k, v]) => [k, { ...v, accuracy: calcAccuracy(v.correct, v.total) }])
+    ),
+  };
+}
+
+// ==================== PHASE 15: SAVED COMPARISONS & WATCHLISTS ====================
+
+export async function createSavedComparison(data: InsertSavedComparison): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(savedComparisons).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserSavedComparisons(userId: number): Promise<SavedComparison[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(savedComparisons)
+    .where(eq(savedComparisons.userId, userId))
+    .orderBy(desc(savedComparisons.updatedAt));
+}
+
+export async function getSavedComparisonById(id: number, userId: number): Promise<SavedComparison | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(savedComparisons)
+    .where(and(eq(savedComparisons.id, id), eq(savedComparisons.userId, userId)))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateSavedComparison(id: number, userId: number, data: Partial<InsertSavedComparison>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(savedComparisons).set({ ...data, updatedAt: new Date() })
+    .where(and(eq(savedComparisons.id, id), eq(savedComparisons.userId, userId)));
+}
+
+export async function deleteSavedComparison(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(savedComparisons)
+    .where(and(eq(savedComparisons.id, id), eq(savedComparisons.userId, userId)));
+}
+
+export async function createWatchlistAlert(data: InsertWatchlistAlert): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(watchlistAlerts).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserWatchlistAlerts(userId: number): Promise<WatchlistAlert[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(watchlistAlerts)
+    .where(eq(watchlistAlerts.userId, userId))
+    .orderBy(desc(watchlistAlerts.createdAt));
+}
+
+export async function getActiveWatchlistAlerts(): Promise<WatchlistAlert[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(watchlistAlerts)
+    .where(eq(watchlistAlerts.isActive, true))
+    .orderBy(asc(watchlistAlerts.createdAt));
+}
+
+export async function updateWatchlistAlert(id: number, userId: number, data: Partial<InsertWatchlistAlert>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(watchlistAlerts).set({ ...data, updatedAt: new Date() })
+    .where(and(eq(watchlistAlerts.id, id), eq(watchlistAlerts.userId, userId)));
+}
+
+export async function deleteWatchlistAlert(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(watchlistAlerts)
+    .where(and(eq(watchlistAlerts.id, id), eq(watchlistAlerts.userId, userId)));
+}
+
+export async function createAlertHistory(data: InsertAlertHistory): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(alertHistory).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserAlertHistory(userId: number, limit = 50): Promise<AlertHistory[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(alertHistory)
+    .where(eq(alertHistory.userId, userId))
+    .orderBy(desc(alertHistory.createdAt))
+    .limit(limit);
+}
+
+// ==================== PHASE 16: REAL-TIME FEATURES ====================
+
+export async function createUserNotification(data: InsertUserNotification): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(userNotifications).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserNotifications(userId: number, unreadOnly = false): Promise<UserNotification[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = unreadOnly
+    ? and(eq(userNotifications.userId, userId), eq(userNotifications.isRead, false))
+    : eq(userNotifications.userId, userId);
+  return db.select().from(userNotifications)
+    .where(conditions)
+    .orderBy(desc(userNotifications.createdAt))
+    .limit(100);
+}
+
+export async function markNotificationRead(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(userNotifications)
+    .set({ isRead: true, readAt: new Date() })
+    .where(and(eq(userNotifications.id, id), eq(userNotifications.userId, userId)));
+}
+
+export async function markAllNotificationsRead(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(userNotifications)
+    .set({ isRead: true, readAt: new Date() })
+    .where(and(eq(userNotifications.userId, userId), eq(userNotifications.isRead, false)));
+}
+
+export async function deleteNotification(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(userNotifications)
+    .where(and(eq(userNotifications.id, id), eq(userNotifications.userId, userId)));
+}
+
+export async function getUnreadNotificationCount(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [result] = await db.select({ count: sql<number>`count(*)` })
+    .from(userNotifications)
+    .where(and(eq(userNotifications.userId, userId), eq(userNotifications.isRead, false)));
+  return result?.count || 0;
+}
+
+export async function createRealtimeSubscription(data: InsertRealtimeSubscription): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(realtimeSubscriptions).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserRealtimeSubscriptions(userId: number): Promise<RealtimeSubscription[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(realtimeSubscriptions)
+    .where(and(eq(realtimeSubscriptions.userId, userId), eq(realtimeSubscriptions.isActive, true)));
+}
+
+export async function deleteRealtimeSubscription(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(realtimeSubscriptions)
+    .where(and(eq(realtimeSubscriptions.id, id), eq(realtimeSubscriptions.userId, userId)));
+}
+
+// ==================== PHASE 17: ADVANCED BOT FEATURES ====================
+
+export async function createBotSchedule(data: InsertBotSchedule): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(botSchedules).values(data);
+  return result[0].insertId;
+}
+
+export async function getBotSchedules(botId: number): Promise<BotSchedule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(botSchedules)
+    .where(eq(botSchedules.botId, botId))
+    .orderBy(desc(botSchedules.createdAt));
+}
+
+export async function getActiveBotSchedules(): Promise<BotSchedule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(botSchedules)
+    .where(eq(botSchedules.isActive, true));
+}
+
+export async function updateBotSchedule(id: number, data: Partial<InsertBotSchedule>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(botSchedules).set({ ...data, updatedAt: new Date() })
+    .where(eq(botSchedules.id, id));
+}
+
+export async function deleteBotSchedule(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(botSchedules).where(eq(botSchedules.id, id));
+}
+
+export async function createBotRiskRule(data: InsertBotRiskRule): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(botRiskRules).values(data);
+  return result[0].insertId;
+}
+
+export async function getBotRiskRules(botId: number): Promise<BotRiskRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(botRiskRules)
+    .where(eq(botRiskRules.botId, botId))
+    .orderBy(desc(botRiskRules.createdAt));
+}
+
+export async function updateBotRiskRule(id: number, data: Partial<InsertBotRiskRule>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(botRiskRules).set({ ...data, updatedAt: new Date() })
+    .where(eq(botRiskRules.id, id));
+}
+
+export async function deleteBotRiskRule(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(botRiskRules).where(eq(botRiskRules.id, id));
+}
+
+export async function createBotExecutionLog(data: InsertBotExecutionLog): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(botExecutionLogs).values(data);
+  return result[0].insertId;
+}
+
+export async function getBotExecutionLogs(botId: number, limit = 100): Promise<BotExecutionLog[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(botExecutionLogs)
+    .where(eq(botExecutionLogs.botId, botId))
+    .orderBy(desc(botExecutionLogs.startedAt))
+    .limit(limit);
+}
+
+export async function updateBotExecutionLog(id: number, data: Partial<InsertBotExecutionLog>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(botExecutionLogs).set(data)
+    .where(eq(botExecutionLogs.id, id));
+}
+
+export async function createBotBenchmark(data: InsertBotBenchmark): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(botBenchmarks).values(data);
+  return result[0].insertId;
+}
+
+export async function getBotBenchmarks(botId: number): Promise<BotBenchmark[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(botBenchmarks)
+    .where(eq(botBenchmarks.botId, botId))
+    .orderBy(desc(botBenchmarks.periodEnd));
+}
+
+export async function getLatestBotBenchmark(botId: number): Promise<BotBenchmark | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(botBenchmarks)
+    .where(eq(botBenchmarks.botId, botId))
+    .orderBy(desc(botBenchmarks.periodEnd))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+// ==================== PHASE 18: SOCIAL & COMMUNITY ====================
+
+export async function createUserProfile(data: InsertUserProfile): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(userProfiles).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserProfile(userId: number): Promise<UserProfile | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(userProfiles)
+    .where(eq(userProfiles.userId, userId))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getPublicUserProfile(userId: number): Promise<UserProfile | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(userProfiles)
+    .where(and(eq(userProfiles.userId, userId), eq(userProfiles.isPublic, true)))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateUserProfile(userId: number, data: Partial<InsertUserProfile>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(userProfiles).set({ ...data, updatedAt: new Date() })
+    .where(eq(userProfiles.userId, userId));
+}
+
+export async function upsertUserProfile(userId: number, data: Partial<InsertUserProfile>): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getUserProfile(userId);
+  if (existing) {
+    await updateUserProfile(userId, data);
+  } else {
+    await createUserProfile({ userId, ...data } as InsertUserProfile);
+  }
+}
+
+export async function getTopTraders(limit = 20): Promise<UserProfile[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userProfiles)
+    .where(eq(userProfiles.isPublic, true))
+    .orderBy(desc(userProfiles.totalReturn))
+    .limit(limit);
+}
+
+export async function createUserFollow(data: InsertUserFollow): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(userFollows).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserFollowers(userId: number): Promise<UserFollow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userFollows)
+    .where(eq(userFollows.followingId, userId))
+    .orderBy(desc(userFollows.createdAt));
+}
+
+export async function getUserFollowing(userId: number): Promise<UserFollow[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userFollows)
+    .where(eq(userFollows.followerId, userId))
+    .orderBy(desc(userFollows.createdAt));
+}
+
+export async function isFollowing(followerId: number, followingId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select().from(userFollows)
+    .where(and(eq(userFollows.followerId, followerId), eq(userFollows.followingId, followingId)))
+    .limit(1);
+  return result.length > 0;
+}
+
+export async function unfollowUser(followerId: number, followingId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(userFollows)
+    .where(and(eq(userFollows.followerId, followerId), eq(userFollows.followingId, followingId)));
+}
+
+export async function createDiscussionThread(data: InsertDiscussionThread): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(discussionThreads).values(data);
+  return result[0].insertId;
+}
+
+export async function getDiscussionThreads(options: {
+  threadType?: string;
+  symbol?: string;
+  relatedEntityId?: number;
+  limit?: number;
+  offset?: number;
+}): Promise<DiscussionThread[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const conditions = [];
+  if (options.threadType) conditions.push(eq(discussionThreads.threadType, options.threadType as any));
+  if (options.symbol) conditions.push(eq(discussionThreads.symbol, options.symbol));
+  if (options.relatedEntityId) conditions.push(eq(discussionThreads.relatedEntityId, options.relatedEntityId));
+  
+  let query = db.select().from(discussionThreads);
+  if (conditions.length > 0) {
+    query = query.where(and(...conditions)) as any;
+  }
+  
+  return query
+    .orderBy(desc(discussionThreads.isPinned), desc(discussionThreads.updatedAt))
+    .limit(options.limit || 50)
+    .offset(options.offset || 0);
+}
+
+export async function getDiscussionThreadById(id: number): Promise<DiscussionThread | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(discussionThreads)
+    .where(eq(discussionThreads.id, id))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateDiscussionThread(id: number, data: Partial<InsertDiscussionThread>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(discussionThreads).set({ ...data, updatedAt: new Date() })
+    .where(eq(discussionThreads.id, id));
+}
+
+export async function incrementThreadViews(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(discussionThreads)
+    .set({ viewCount: sql`view_count + 1` })
+    .where(eq(discussionThreads.id, id));
+}
+
+export async function createDiscussionComment(data: InsertDiscussionComment): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(discussionComments).values(data);
+  
+  // Update thread's comment count and last activity
+  await db.update(discussionThreads)
+    .set({ 
+      commentCount: sql`comment_count + 1`,
+      updatedAt: new Date()
+    })
+    .where(eq(discussionThreads.id, data.threadId));
+  
+  return result[0].insertId;
+}
+
+export async function getThreadComments(threadId: number): Promise<DiscussionComment[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(discussionComments)
+    .where(eq(discussionComments.threadId, threadId))
+    .orderBy(asc(discussionComments.createdAt));
+}
+
+export async function updateDiscussionComment(id: number, userId: number, data: Partial<InsertDiscussionComment>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(discussionComments)
+    .set({ ...data, isEdited: true, updatedAt: new Date() })
+    .where(and(eq(discussionComments.id, id), eq(discussionComments.userId, userId)));
+}
+
+export async function deleteDiscussionComment(id: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const comment = await db.select().from(discussionComments)
+    .where(and(eq(discussionComments.id, id), eq(discussionComments.userId, userId)))
+    .limit(1);
+  
+  if (comment.length > 0) {
+    await db.delete(discussionComments)
+      .where(eq(discussionComments.id, id));
+    
+    // Decrement thread's comment count
+    await db.update(discussionThreads)
+      .set({ commentCount: sql`comment_count - 1` })
+      .where(eq(discussionThreads.id, comment[0].threadId));
+  }
+}
+
+export async function createStrategyRating(data: InsertStrategyRating): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(strategyRatings).values(data);
+  return result[0].insertId;
+}
+
+export async function getStrategyRatings(listingId: number): Promise<StrategyRating[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(strategyRatings)
+    .where(eq(strategyRatings.listingId, listingId))
+    .orderBy(desc(strategyRatings.createdAt));
+}
+
+export async function getUserStrategyRating(listingId: number, userId: number): Promise<StrategyRating | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(strategyRatings)
+    .where(and(eq(strategyRatings.listingId, listingId), eq(strategyRatings.userId, userId)))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateStrategyRating(id: number, userId: number, data: Partial<InsertStrategyRating>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(strategyRatings)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(strategyRatings.id, id), eq(strategyRatings.userId, userId)));
+}
+
+export async function createActivityFeedItem(data: InsertActivityFeed): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(activityFeed).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserActivityFeed(userId: number, limit = 50): Promise<ActivityFeed[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  // Get users that this user follows
+  const following = await getUserFollowing(userId);
+  const followingIds = following.map(f => f.followingId);
+  
+  if (followingIds.length === 0) {
+    // Return own activity if not following anyone
+    return db.select().from(activityFeed)
+      .where(eq(activityFeed.userId, userId))
+      .orderBy(desc(activityFeed.createdAt))
+      .limit(limit);
+  }
+  
+  // Return activity from followed users and self
+  return db.select().from(activityFeed)
+    .where(or(
+      eq(activityFeed.userId, userId),
+      inArray(activityFeed.userId, followingIds)
+    ))
+    .orderBy(desc(activityFeed.createdAt))
+    .limit(limit);
+}
+
+export async function getPublicActivityFeed(limit = 50): Promise<ActivityFeed[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(activityFeed)
+    .where(eq(activityFeed.isPublic, true))
+    .orderBy(desc(activityFeed.createdAt))
+    .limit(limit);
+}
+
+export async function createUserBadge(data: InsertUserBadge): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(userBadges).values(data);
+  return result[0].insertId;
+}
+
+export async function getUserBadges(userId: number): Promise<UserBadge[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userBadges)
+    .where(eq(userBadges.userId, userId))
+    .orderBy(desc(userBadges.earnedAt));
+}
+
+export async function hasBadge(userId: number, badgeId: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select().from(userBadges)
+    .where(and(eq(userBadges.userId, userId), eq(userBadges.badgeId, badgeId as BadgeId)))
+    .limit(1);
+  return result.length > 0;
+}
+
+export async function getBadgeDefinition(badgeId: BadgeId) {
+  return badgeDefinitions[badgeId];
+}
+
+export async function getAllBadgeDefinitions() {
+  return badgeDefinitions;
 }

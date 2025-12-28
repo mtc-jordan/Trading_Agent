@@ -158,3 +158,73 @@
 - [x] Add export comparison report (CSV)
 - [x] Comparison mode toggle with banner
 - [x] Unit tests for comparison feature (129 tests passing)
+
+## Phase 14: Performance Tracking & Accuracy
+- [x] Create price_tracking table for actual price movements
+- [x] Create prediction_accuracy table for accuracy metrics
+- [x] Create API routes for accuracy stats and price tracking
+- [ ] Track actual price movements after each AI recommendation (background job)
+- [ ] Calculate prediction accuracy per agent and overall (background job)
+- [x] Build accuracy dashboard with historical performance charts (frontend)
+- [ ] Add "accuracy score" badge to marketplace bot listings (frontend)
+- [ ] Generate weekly/monthly accuracy reports (background job)
+- [ ] Create accuracy leaderboard (frontend)
+
+## Phase 15: Saved Comparisons & Watchlists
+- [x] Create saved_comparisons table
+- [x] Create watchlist_alerts table with alert settings
+- [x] Create alert_history table for sent alerts
+- [x] Create API routes for saved comparisons CRUD
+- [x] Create API routes for watchlist alerts CRUD
+- [ ] Save comparison sets with custom names (frontend)
+- [ ] Create watchlist alerts for recommendation changes (frontend)
+- [ ] Email/push notifications when watched symbols change (notification service)
+- [ ] Quick-access saved comparisons in sidebar (frontend)
+- [ ] Watchlist management UI (frontend)
+
+## Phase 16: Real-Time Features
+- [x] Create user_notifications table
+- [x] Create realtime_subscriptions table
+- [x] Create notification API routes (list, mark read, delete)
+- [ ] Set up WebSocket server with Socket.IO
+- [ ] WebSocket integration for live price updates
+- [x] Real-time notification center (frontend)
+- [ ] Live bot execution status updates
+- [ ] Streaming AI analysis progress indicator
+- [ ] Real-time portfolio value updates
+- [ ] Connection status indicator
+
+## Phase 17: Advanced Bot Features
+- [x] Create bot_schedules table
+- [x] Create bot_risk_rules table for risk management
+- [x] Create bot_execution_logs table
+- [x] Create bot_benchmarks table
+- [x] Create API routes for bot schedules CRUD
+- [x] Create API routes for bot risk rules CRUD
+- [x] Create API routes for execution logs and benchmarks
+- [ ] Bot scheduling (run at specific times/intervals) - background job
+- [ ] Multi-symbol bot strategies (frontend)
+- [ ] Risk management rules UI (stop-loss, take-profit) (frontend)
+- [ ] Bot performance benchmarking vs S&P 500 (frontend)
+- [ ] Bot execution history with detailed logs (frontend)
+- [ ] Position sizing rules (frontend)
+
+## Phase 18: Social & Community
+- [x] Create user_profiles table with trading stats
+- [x] Create user_follows table
+- [x] Create discussion_threads table
+- [x] Create discussion_comments table
+- [x] Create strategy_ratings table
+- [x] Create activity_feed table
+- [x] Create user_badges table with badge definitions
+- [x] Create API routes for user profiles CRUD
+- [x] Create API routes for follow/unfollow
+- [x] Create API routes for discussion threads and comments
+- [x] Create API routes for strategy ratings
+- [x] Create API routes for activity feed
+- [x] User profiles with trading stats (frontend)
+- [x] Follow top traders functionality (frontend)
+- [x] Discussion threads on analyses (frontend)
+- [x] Strategy sharing with comments/ratings (frontend)
+- [x] Activity feed for followed users (frontend)
+- [x] Reputation/badge system (frontend)

@@ -1007,6 +1007,713 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  // ==================== PHASE 14: PERFORMANCE TRACKING ====================
+  accuracy: router({
+    // Get user's prediction accuracy stats
+    getStats: protectedProcedure.query(async ({ ctx }) => {
+      return db.getAgentAccuracyStats(ctx.user.id);
+    }),
+
+    // Get accuracy records
+    getRecords: protectedProcedure
+      .input(z.object({
+        agentType: z.enum(["technical", "fundamental", "sentiment", "risk", "microstructure", "macro", "quant", "consensus"]).optional(),
+        timeframe: z.enum(["1day", "7day", "30day"]).optional(),
+        limit: z.number().min(1).max(100).default(50),
+      }))
+      .query(async ({ ctx }) => {
+        return db.getUserPredictionAccuracy(ctx.user.id);
+      }),
+
+    // Get price tracking for an analysis
+    getPriceTracking: protectedProcedure
+      .input(z.object({ analysisId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getPriceTrackingByAnalysis(input.analysisId);
+      }),
+  }),
+
+  // ==================== PHASE 15: SAVED COMPARISONS & WATCHLISTS ====================
+  savedComparisons: router({
+    // List user's saved comparisons
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserSavedComparisons(ctx.user.id);
+    }),
+
+    // Get a specific saved comparison
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const comparison = await db.getSavedComparisonById(input.id, ctx.user.id);
+        if (!comparison) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Comparison not found" });
+        }
+        return comparison;
+      }),
+
+    // Create a new saved comparison
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+        description: z.string().optional(),
+        analysisIds: z.array(z.number()).min(1).max(10),
+        symbolsIncluded: z.array(z.string()).optional(),
+        dateRange: z.object({
+          start: z.string(),
+          end: z.string(),
+        }).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await db.createSavedComparison({
+          userId: ctx.user.id,
+          name: input.name,
+          description: input.description,
+          analysisIds: input.analysisIds,
+          symbolsIncluded: input.symbolsIncluded,
+          dateRange: input.dateRange,
+        });
+        return { id, success: true };
+      }),
+
+    // Update a saved comparison
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        description: z.string().optional(),
+        isPinned: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateSavedComparison(input.id, ctx.user.id, input);
+        return { success: true };
+      }),
+
+    // Delete a saved comparison
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteSavedComparison(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // Watchlist Alerts
+  watchlistAlerts: router({
+    // List user's alerts
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserWatchlistAlerts(ctx.user.id);
+    }),
+
+    // Create a new alert
+    create: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(20),
+        alertOnRecommendationChange: z.boolean().default(true),
+        alertOnConfidenceChange: z.boolean().default(false),
+        confidenceThreshold: z.number().min(0).max(1).optional(),
+        alertOnPriceTarget: z.boolean().default(false),
+        priceTargetHigh: z.number().optional(),
+        priceTargetLow: z.number().optional(),
+        emailNotification: z.boolean().default(true),
+        pushNotification: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await db.createWatchlistAlert({
+          userId: ctx.user.id,
+          symbol: input.symbol.toUpperCase(),
+          alertOnRecommendationChange: input.alertOnRecommendationChange,
+          alertOnConfidenceChange: input.alertOnConfidenceChange,
+          confidenceThreshold: input.confidenceThreshold?.toString(),
+          alertOnPriceTarget: input.alertOnPriceTarget,
+          priceTargetHigh: input.priceTargetHigh?.toString(),
+          priceTargetLow: input.priceTargetLow?.toString(),
+          emailNotification: input.emailNotification,
+          pushNotification: input.pushNotification,
+        });
+        return { id, success: true };
+      }),
+
+    // Update an alert
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        isActive: z.boolean().optional(),
+        alertOnRecommendationChange: z.boolean().optional(),
+        alertOnConfidenceChange: z.boolean().optional(),
+        confidenceThreshold: z.number().min(0).max(1).optional(),
+        alertOnPriceTarget: z.boolean().optional(),
+        priceTargetHigh: z.number().optional(),
+        priceTargetLow: z.number().optional(),
+        emailNotification: z.boolean().optional(),
+        pushNotification: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...data } = input;
+        await db.updateWatchlistAlert(id, ctx.user.id, {
+          ...data,
+          confidenceThreshold: data.confidenceThreshold?.toString(),
+          priceTargetHigh: data.priceTargetHigh?.toString(),
+          priceTargetLow: data.priceTargetLow?.toString(),
+        });
+        return { success: true };
+      }),
+
+    // Delete an alert
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteWatchlistAlert(input.id, ctx.user.id);
+        return { success: true };
+      }),
+
+    // Get alert history
+    getHistory: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(100).default(50) }))
+      .query(async ({ ctx, input }) => {
+        return db.getUserAlertHistory(ctx.user.id, input.limit);
+      }),
+  }),
+
+  // ==================== PHASE 16: NOTIFICATIONS ====================
+  notifications: router({
+    // Get user's notifications
+    list: protectedProcedure
+      .input(z.object({ unreadOnly: z.boolean().default(false) }))
+      .query(async ({ ctx, input }) => {
+        return db.getUserNotifications(ctx.user.id, input.unreadOnly);
+      }),
+
+    // Get unread count
+    getUnreadCount: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUnreadNotificationCount(ctx.user.id);
+    }),
+
+    // Mark notification as read
+    markRead: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.markNotificationRead(input.id, ctx.user.id);
+        return { success: true };
+      }),
+
+    // Mark all as read
+    markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
+      await db.markAllNotificationsRead(ctx.user.id);
+      return { success: true };
+    }),
+
+    // Delete notification
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteNotification(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // ==================== PHASE 17: BOT SCHEDULING ====================
+  botSchedule: router({
+    // Get schedules for a bot
+    list: protectedProcedure
+      .input(z.object({ botId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        // Verify bot ownership
+        const bot = await db.getTradingBotById(input.botId, ctx.user.id);
+        if (!bot) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Bot not found" });
+        }
+        return db.getBotSchedules(input.botId);
+      }),
+
+    // Create a schedule
+    create: protectedProcedure
+      .input(z.object({
+        botId: z.number(),
+        name: z.string().min(1).max(255),
+        scheduleType: z.enum(["once", "daily", "weekly", "monthly", "cron"]),
+        cronExpression: z.string().optional(),
+        runTime: z.string().optional(),
+        daysOfWeek: z.array(z.number().min(0).max(6)).optional(),
+        dayOfMonth: z.number().min(1).max(31).optional(),
+        timezone: z.string().default("UTC"),
+        maxExecutionTime: z.number().min(60).max(3600).default(300),
+        retryOnFailure: z.boolean().default(true),
+        maxRetries: z.number().min(0).max(5).default(3),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Verify bot ownership
+        const bot = await db.getTradingBotById(input.botId, ctx.user.id);
+        if (!bot) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Bot not found" });
+        }
+
+        // Check tier access for scheduling
+        if (!checkTierAccess(ctx.user.subscriptionTier, "starter")) {
+          throw new TRPCError({ 
+            code: "FORBIDDEN", 
+            message: "Bot scheduling requires Starter tier or higher" 
+          });
+        }
+
+        const id = await db.createBotSchedule({
+          botId: input.botId,
+          userId: ctx.user.id,
+          name: input.name,
+          scheduleType: input.scheduleType,
+          cronExpression: input.cronExpression,
+          runTime: input.runTime,
+          daysOfWeek: input.daysOfWeek,
+          dayOfMonth: input.dayOfMonth,
+          timezone: input.timezone,
+          maxExecutionTime: input.maxExecutionTime,
+          retryOnFailure: input.retryOnFailure,
+          maxRetries: input.maxRetries,
+        });
+        return { id, success: true };
+      }),
+
+    // Update a schedule
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        isActive: z.boolean().optional(),
+        runTime: z.string().optional(),
+        daysOfWeek: z.array(z.number().min(0).max(6)).optional(),
+        timezone: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await db.updateBotSchedule(id, data);
+        return { success: true };
+      }),
+
+    // Delete a schedule
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteBotSchedule(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // Bot Risk Rules
+  botRiskRules: router({
+    // Get risk rules for a bot
+    list: protectedProcedure
+      .input(z.object({ botId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const bot = await db.getTradingBotById(input.botId, ctx.user.id);
+        if (!bot) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Bot not found" });
+        }
+        return db.getBotRiskRules(input.botId);
+      }),
+
+    // Create a risk rule
+    create: protectedProcedure
+      .input(z.object({
+        botId: z.number(),
+        name: z.string().min(1).max(255),
+        ruleType: z.enum(["stop_loss", "take_profit", "trailing_stop", "max_position", "max_daily_loss", "max_drawdown", "position_sizing"]),
+        triggerValue: z.number(),
+        triggerType: z.enum(["percentage", "absolute", "atr_multiple"]).default("percentage"),
+        actionOnTrigger: z.enum(["close_position", "reduce_position", "pause_bot", "notify_only"]).default("close_position"),
+        reduceByPercentage: z.number().min(0).max(100).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const bot = await db.getTradingBotById(input.botId, ctx.user.id);
+        if (!bot) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Bot not found" });
+        }
+
+        const id = await db.createBotRiskRule({
+          botId: input.botId,
+          userId: ctx.user.id,
+          name: input.name,
+          ruleType: input.ruleType,
+          triggerValue: input.triggerValue.toString(),
+          triggerType: input.triggerType,
+          actionOnTrigger: input.actionOnTrigger,
+          reduceByPercentage: input.reduceByPercentage?.toString(),
+        });
+        return { id, success: true };
+      }),
+
+    // Update a risk rule
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        isActive: z.boolean().optional(),
+        triggerValue: z.number().optional(),
+        actionOnTrigger: z.enum(["close_position", "reduce_position", "pause_bot", "notify_only"]).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...data } = input;
+        await db.updateBotRiskRule(id, {
+          ...data,
+          triggerValue: data.triggerValue?.toString(),
+        });
+        return { success: true };
+      }),
+
+    // Delete a risk rule
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteBotRiskRule(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // Bot Execution Logs
+  botExecutionLogs: router({
+    // Get execution logs for a bot
+    list: protectedProcedure
+      .input(z.object({
+        botId: z.number(),
+        limit: z.number().min(1).max(100).default(50),
+      }))
+      .query(async ({ ctx, input }) => {
+        const bot = await db.getTradingBotById(input.botId, ctx.user.id);
+        if (!bot) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Bot not found" });
+        }
+        return db.getBotExecutionLogs(input.botId, input.limit);
+      }),
+  }),
+
+  // Bot Benchmarks
+  botBenchmarks: router({
+    // Get benchmarks for a bot
+    list: protectedProcedure
+      .input(z.object({ botId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const bot = await db.getTradingBotById(input.botId, ctx.user.id);
+        if (!bot) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Bot not found" });
+        }
+        return db.getBotBenchmarks(input.botId);
+      }),
+
+    // Get latest benchmark
+    getLatest: protectedProcedure
+      .input(z.object({ botId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const bot = await db.getTradingBotById(input.botId, ctx.user.id);
+        if (!bot) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Bot not found" });
+        }
+        return db.getLatestBotBenchmark(input.botId);
+      }),
+  }),
+
+  // ==================== PHASE 18: SOCIAL & COMMUNITY ====================
+  profile: router({
+    // Get own profile
+    get: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserProfile(ctx.user.id);
+    }),
+
+    // Get public profile by user ID
+    getPublic: publicProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getPublicUserProfile(input.userId);
+      }),
+
+    // Update profile
+    update: protectedProcedure
+      .input(z.object({
+        displayName: z.string().min(1).max(100).optional(),
+        bio: z.string().max(500).optional(),
+        avatarUrl: z.string().url().optional(),
+        location: z.string().max(100).optional(),
+        website: z.string().url().optional(),
+        twitterHandle: z.string().max(50).optional(),
+        isPublic: z.boolean().optional(),
+        showTradingStats: z.boolean().optional(),
+        showPortfolio: z.boolean().optional(),
+        allowFollowers: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.upsertUserProfile(ctx.user.id, input);
+        return { success: true };
+      }),
+
+    // Get top traders
+    getTopTraders: publicProcedure
+      .input(z.object({ limit: z.number().min(1).max(100).default(20) }))
+      .query(async ({ input }) => {
+        return db.getTopTraders(input.limit);
+      }),
+
+    // Get user badges
+    getBadges: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserBadges(ctx.user.id);
+    }),
+
+    // Get all badge definitions
+    getAllBadges: publicProcedure.query(async () => {
+      return db.getAllBadgeDefinitions();
+    }),
+  }),
+
+  // Follow system
+  follow: router({
+    // Get followers
+    getFollowers: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserFollowers(ctx.user.id);
+    }),
+
+    // Get following
+    getFollowing: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserFollowing(ctx.user.id);
+    }),
+
+    // Check if following
+    isFollowing: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return db.isFollowing(ctx.user.id, input.userId);
+      }),
+
+    // Follow a user
+    follow: protectedProcedure
+      .input(z.object({
+        userId: z.number(),
+        notifyOnTrade: z.boolean().default(false),
+        notifyOnAnalysis: z.boolean().default(true),
+        notifyOnStrategy: z.boolean().default(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        if (input.userId === ctx.user.id) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot follow yourself" });
+        }
+
+        // Check if target user allows followers
+        const targetProfile = await db.getUserProfile(input.userId);
+        if (targetProfile && !targetProfile.allowFollowers) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "This user does not allow followers" });
+        }
+
+        // Check if already following
+        const alreadyFollowing = await db.isFollowing(ctx.user.id, input.userId);
+        if (alreadyFollowing) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Already following this user" });
+        }
+
+        await db.createUserFollow({
+          followerId: ctx.user.id,
+          followingId: input.userId,
+          notifyOnTrade: input.notifyOnTrade,
+          notifyOnAnalysis: input.notifyOnAnalysis,
+          notifyOnStrategy: input.notifyOnStrategy,
+        });
+
+        // Create activity feed item
+        await db.createActivityFeedItem({
+          userId: ctx.user.id,
+          activityType: "follow",
+          title: "Started following a trader",
+          relatedEntityType: "user",
+          relatedEntityId: input.userId,
+          isPublic: true,
+        });
+
+        return { success: true };
+      }),
+
+    // Unfollow a user
+    unfollow: protectedProcedure
+      .input(z.object({ userId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.unfollowUser(ctx.user.id, input.userId);
+        return { success: true };
+      }),
+  }),
+
+  // Discussion threads
+  discussion: router({
+    // Get threads
+    list: publicProcedure
+      .input(z.object({
+        threadType: z.enum(["analysis", "strategy", "bot", "general", "market"]).optional(),
+        symbol: z.string().optional(),
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+      }))
+      .query(async ({ input }) => {
+        return db.getDiscussionThreads(input);
+      }),
+
+    // Get a thread
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const thread = await db.getDiscussionThreadById(input.id);
+        if (!thread) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Thread not found" });
+        }
+        // Increment view count
+        await db.incrementThreadViews(input.id);
+        return thread;
+      }),
+
+    // Create a thread
+    create: protectedProcedure
+      .input(z.object({
+        threadType: z.enum(["analysis", "strategy", "bot", "general", "market"]),
+        title: z.string().min(1).max(255),
+        content: z.string().min(1).max(10000),
+        symbol: z.string().optional(),
+        relatedEntityId: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await db.createDiscussionThread({
+          userId: ctx.user.id,
+          threadType: input.threadType,
+          title: input.title,
+          content: input.content,
+          symbol: input.symbol?.toUpperCase(),
+          relatedEntityId: input.relatedEntityId,
+        });
+
+        // Create activity feed item
+        await db.createActivityFeedItem({
+          userId: ctx.user.id,
+          activityType: "comment",
+          title: `Started a discussion: ${input.title}`,
+          relatedEntityType: "thread",
+          relatedEntityId: id,
+          symbol: input.symbol?.toUpperCase(),
+          isPublic: true,
+        });
+
+        return { id, success: true };
+      }),
+
+    // Update a thread
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string().min(1).max(255).optional(),
+        content: z.string().min(1).max(10000).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const thread = await db.getDiscussionThreadById(input.id);
+        if (!thread || thread.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Cannot edit this thread" });
+        }
+        const { id, ...data } = input;
+        await db.updateDiscussionThread(id, data);
+        return { success: true };
+      }),
+
+    // Get comments for a thread
+    getComments: publicProcedure
+      .input(z.object({ threadId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getThreadComments(input.threadId);
+      }),
+
+    // Add a comment
+    addComment: protectedProcedure
+      .input(z.object({
+        threadId: z.number(),
+        content: z.string().min(1).max(5000),
+        parentCommentId: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const id = await db.createDiscussionComment({
+          threadId: input.threadId,
+          userId: ctx.user.id,
+          content: input.content,
+          parentCommentId: input.parentCommentId,
+        });
+        return { id, success: true };
+      }),
+
+    // Update a comment
+    updateComment: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        content: z.string().min(1).max(5000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updateDiscussionComment(input.id, ctx.user.id, { content: input.content });
+        return { success: true };
+      }),
+
+    // Delete a comment
+    deleteComment: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteDiscussionComment(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  // Strategy ratings
+  strategyRatings: router({
+    // Get ratings for a listing
+    list: publicProcedure
+      .input(z.object({ listingId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getStrategyRatings(input.listingId);
+      }),
+
+    // Get user's rating for a listing
+    getUserRating: protectedProcedure
+      .input(z.object({ listingId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return db.getUserStrategyRating(input.listingId, ctx.user.id);
+      }),
+
+    // Create or update rating
+    rate: protectedProcedure
+      .input(z.object({
+        listingId: z.number(),
+        rating: z.number().min(1).max(5),
+        review: z.string().max(2000).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const existing = await db.getUserStrategyRating(input.listingId, ctx.user.id);
+        if (existing) {
+          await db.updateStrategyRating(existing.id, ctx.user.id, {
+            rating: input.rating,
+            review: input.review,
+          });
+        } else {
+          await db.createStrategyRating({
+            listingId: input.listingId,
+            userId: ctx.user.id,
+            rating: input.rating,
+            review: input.review,
+          });
+        }
+        return { success: true };
+      }),
+  }),
+
+  // Activity feed
+  activityFeed: router({
+    // Get personalized feed (from followed users)
+    getFeed: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(100).default(50) }))
+      .query(async ({ ctx, input }) => {
+        return db.getUserActivityFeed(ctx.user.id, input.limit);
+      }),
+
+    // Get public feed
+    getPublicFeed: publicProcedure
+      .input(z.object({ limit: z.number().min(1).max(100).default(50) }))
+      .query(async ({ input }) => {
+        return db.getPublicActivityFeed(input.limit);
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

@@ -36,6 +36,13 @@
       "when": 1766886153388,
       "tag": "0004_daffy_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1766888596438,
+      "tag": "0005_cold_expediter",
+      "breakpoints": true
     }
   ]
 }
