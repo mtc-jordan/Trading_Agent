@@ -22,6 +22,8 @@ import {
   LlmProvider 
 } from "./services/llmProvider";
 import { runBacktest, BacktestConfig } from "./services/backtesting";
+import { runBacktestValidation, getUserBacktests, getBacktestById, BacktestConfig as ValidationConfig } from "./services/backtestingValidation";
+import { RLTradingAgent } from "./services/rlAgent";
 import { callDataApi } from "./_core/dataApi";
 import { getStockQuote, searchStocks, getCachedPrice, getAllCachedPrices, fetchStockPrice } from "./services/marketData";
 import { getUserEmailPreferences, updateUserEmailPreferences, testSendGridApiKey } from "./services/twilioEmail";
@@ -2221,6 +2223,217 @@ export const appRouter = router({
       .input(z.object({ limit: z.number().min(1).max(100).default(50) }))
       .query(async ({ input }) => {
         return db.getPublicActivityFeed(input.limit);
+      }),
+  }),
+
+  // ==================== BACKTESTING VALIDATION ====================
+  backtestValidation: router({
+    // Run backtest validation
+    run: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(10),
+        startDate: z.string(),
+        endDate: z.string(),
+        initialCapital: z.number().min(1000).max(10000000),
+        strategyType: z.enum(['standard', 'enhanced', 'rl', 'custom']),
+        strategyConfig: z.record(z.string(), z.unknown()).optional(),
+        commission: z.number().min(0).max(0.1).optional(),
+        slippage: z.number().min(0).max(0.1).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const config: ValidationConfig = {
+          symbol: input.symbol.toUpperCase(),
+          startDate: new Date(input.startDate),
+          endDate: new Date(input.endDate),
+          initialCapital: input.initialCapital,
+          strategyType: input.strategyType,
+          strategyConfig: input.strategyConfig,
+          commission: input.commission,
+          slippage: input.slippage,
+        };
+        
+        return runBacktestValidation(ctx.user.id, config);
+      }),
+
+    // Get user's backtest history
+    list: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(100).default(20) }))
+      .query(async ({ ctx, input }) => {
+        return getUserBacktests(ctx.user.id, input.limit);
+      }),
+
+    // Get specific backtest result
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return getBacktestById(input.id, ctx.user.id);
+      }),
+  }),
+
+  // ==================== REINFORCEMENT LEARNING AGENT ====================
+  rlAgent: router({
+    // Create and train a new RL agent
+    train: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(10),
+        name: z.string().min(1).max(100),
+        episodes: z.number().min(10).max(1000).default(100),
+        config: z.object({
+          learningRate: z.number().min(0.00001).max(0.1).optional(),
+          gamma: z.number().min(0.5).max(0.999).optional(),
+          epsilon: z.number().min(0).max(1).optional(),
+          epsilonDecay: z.number().min(0.9).max(0.9999).optional(),
+          epsilonMin: z.number().min(0).max(0.5).optional(),
+          batchSize: z.number().min(16).max(256).optional(),
+        }).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const agent = new RLTradingAgent(input.config);
+        
+        // Save initial model
+        const modelId = await agent.saveModel(
+          ctx.user.id,
+          input.name,
+          input.symbol.toUpperCase()
+        );
+        
+        // Return model ID - training happens in background
+        return {
+          modelId,
+          message: 'RL agent created successfully. Training will continue in background.',
+          stats: agent.getStats(),
+        };
+      }),
+
+    // Get prediction from trained RL agent
+    predict: protectedProcedure
+      .input(z.object({
+        modelId: z.string(),
+        state: z.object({
+          priceChange1d: z.number(),
+          priceChange5d: z.number(),
+          priceChange20d: z.number(),
+          volatility: z.number(),
+          rsi: z.number(),
+          macdHistogram: z.number(),
+          bollingerPosition: z.number(),
+          adx: z.number(),
+          atr: z.number(),
+          marketRegime: z.number(),
+          vixLevel: z.number(),
+          currentPosition: z.number(),
+          unrealizedPnl: z.number(),
+          daysInPosition: z.number(),
+        }),
+      }))
+      .query(async ({ input }) => {
+        const agent = new RLTradingAgent();
+        const loaded = await agent.loadModel(input.modelId);
+        
+        if (!loaded) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Model not found' });
+        }
+        
+        const action = agent.getAction(input.state);
+        return action;
+      }),
+
+    // List user's RL models
+    list: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(50).default(20) }))
+      .query(async ({ ctx, input }) => {
+        return db.getUserRLModels(ctx.user.id, input.limit);
+      }),
+  }),
+
+  // ==================== STRATEGY COMPARISON ====================
+  strategyComparison: router({
+    // Run strategy comparison
+    compare: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(10),
+        startDate: z.string(),
+        endDate: z.string(),
+        initialCapital: z.number().min(1000).max(10000000),
+        strategies: z.array(z.enum(['standard', 'enhanced', 'rl'])).min(2).max(4),
+        name: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const results: Record<string, any> = {};
+        
+        // Run backtest for each strategy
+        for (const strategy of input.strategies) {
+          const config: ValidationConfig = {
+            symbol: input.symbol.toUpperCase(),
+            startDate: new Date(input.startDate),
+            endDate: new Date(input.endDate),
+            initialCapital: input.initialCapital,
+            strategyType: strategy,
+          };
+          
+          const result = await runBacktestValidation(ctx.user.id, config);
+          results[strategy] = result;
+        }
+        
+        // Determine winner based on Sharpe ratio
+        let winner = '';
+        let bestSharpe = -Infinity;
+        for (const [strategy, result] of Object.entries(results)) {
+          if (result.metrics.sharpeRatio > bestSharpe) {
+            bestSharpe = result.metrics.sharpeRatio;
+            winner = strategy;
+          }
+        }
+        
+        // Save comparison to database
+        const comparison = await db.saveStrategyComparison({
+          userId: ctx.user.id,
+          name: input.name || `${input.symbol} Comparison`,
+          symbol: input.symbol.toUpperCase(),
+          startDate: new Date(input.startDate),
+          endDate: new Date(input.endDate),
+          initialCapital: input.initialCapital,
+          strategies: input.strategies.map(s => ({ type: s })),
+          results,
+          winner,
+        });
+        
+        return {
+          id: comparison?.id,
+          results,
+          winner,
+          summary: {
+            symbol: input.symbol,
+            period: `${input.startDate} to ${input.endDate}`,
+            strategies: input.strategies,
+            metrics: Object.fromEntries(
+              Object.entries(results).map(([strategy, result]) => [
+                strategy,
+                {
+                  totalReturn: result.metrics.totalReturn,
+                  sharpeRatio: result.metrics.sharpeRatio,
+                  maxDrawdown: result.metrics.maxDrawdown,
+                  winRate: result.metrics.winRate,
+                  totalTrades: result.metrics.totalTrades,
+                },
+              ])
+            ),
+          },
+        };
+      }),
+
+    // Get user's comparison history
+    list: protectedProcedure
+      .input(z.object({ limit: z.number().min(1).max(50).default(20) }))
+      .query(async ({ ctx, input }) => {
+        return db.getUserStrategyComparisons(ctx.user.id, input.limit);
+      }),
+
+    // Get specific comparison
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return db.getStrategyComparisonById(input.id, ctx.user.id);
       }),
   }),
 });

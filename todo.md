@@ -440,3 +440,52 @@
 - [x] Add Enhanced Analysis route and sidebar navigation
 - [ ] Study reinforcement learning for trading (future)
 - [ ] Add backtesting validation for recommendations (future)
+
+## Phase 36: Backtesting Validation
+- [ ] Create backtesting service for enhanced analysis recommendations
+- [ ] Fetch historical price data for validation period
+- [ ] Compare AI recommendations against actual price movements
+- [ ] Calculate prediction accuracy metrics (hit rate, profit factor)
+- [ ] Generate validation reports with confidence intervals
+- [ ] Add backtesting API routes
+- [ ] Create backtesting results UI
+
+## Phase 37: Reinforcement Learning Agent
+- [ ] Research RL algorithms for trading (Q-learning, DQN, PPO)
+- [ ] Design state space (price, indicators, market regime)
+- [ ] Design action space (buy, sell, hold, position size)
+- [ ] Design reward function (risk-adjusted returns)
+- [ ] Implement Q-learning agent with experience replay
+- [ ] Add training pipeline with historical data
+- [ ] Integrate RL agent into enhanced analysis system
+- [ ] Add RL agent configuration in settings
+
+## Phase 38: Strategy Comparison Tool
+- [ ] Create comparison service for Standard vs Enhanced analysis
+- [ ] Track performance metrics for both strategies
+- [ ] Calculate statistical significance of differences
+- [ ] Build comparison API endpoints
+- [ ] Create side-by-side comparison UI
+- [ ] Add performance charts (returns, drawdown, Sharpe)
+- [ ] Generate comparison reports
+
+
+## Phase 36: Backtesting Validation, RL Agent & Strategy Comparison
+- [x] Create backtesting validation service with historical data simulation
+- [x] Implement technical indicator calculations (RSI, MACD, Bollinger, ATR, ADX)
+- [x] Add signal generation for standard and enhanced strategies
+- [x] Calculate backtest metrics (Sharpe, Sortino, Calmar, win rate, profit factor)
+- [x] Track prediction accuracy by recommendation type
+- [x] Create Reinforcement Learning Agent service with Q-learning
+- [x] Implement experience replay buffer and epsilon-greedy exploration
+- [x] Add state representation for trading decisions
+- [x] Create reward calculation for trading outcomes
+- [x] Add tRPC endpoints for backtesting validation
+- [x] Add tRPC endpoints for RL agent training and prediction
+- [x] Add tRPC endpoints for strategy comparison
+- [x] Create BacktestingValidation UI component with charts
+- [x] Create StrategyComparison UI component with radar chart
+- [x] Integrate components into Enhanced Analysis page
+- [x] Add database tables for backtest results, RL models, and strategy comparisons
+- [x] Write 34 unit tests for new features (315 tests total passing)
+- [x] Push to GitHub

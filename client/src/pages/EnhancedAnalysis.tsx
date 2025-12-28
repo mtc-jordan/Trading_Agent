@@ -1,5 +1,7 @@
 import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import { BacktestingValidation } from "@/components/BacktestingValidation";
+import { StrategyComparison } from "@/components/StrategyComparison";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -464,10 +466,12 @@ export default function EnhancedAnalysis() {
             <Card className="bg-card border-border">
               <CardContent className="pt-6">
                 <Tabs defaultValue="agents" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 mb-6">
+                  <TabsList className="grid w-full grid-cols-5 mb-6">
                     <TabsTrigger value="agents">AI Agents</TabsTrigger>
-                    <TabsTrigger value="technical">Technical Indicators</TabsTrigger>
-                    <TabsTrigger value="research">Research Basis</TabsTrigger>
+                    <TabsTrigger value="technical">Technical</TabsTrigger>
+                    <TabsTrigger value="research">Research</TabsTrigger>
+                    <TabsTrigger value="backtest">Backtest</TabsTrigger>
+                    <TabsTrigger value="compare">Compare</TabsTrigger>
                   </TabsList>
 
                   {/* Agents Tab */}
@@ -737,6 +741,16 @@ export default function EnhancedAnalysis() {
                         </blockquote>
                       </CardContent>
                     </Card>
+                  </TabsContent>
+
+                  {/* Backtest Tab */}
+                  <TabsContent value="backtest">
+                    <BacktestingValidation />
+                  </TabsContent>
+
+                  {/* Compare Tab */}
+                  <TabsContent value="compare">
+                    <StrategyComparison />
                   </TabsContent>
                 </Tabs>
               </CardContent>

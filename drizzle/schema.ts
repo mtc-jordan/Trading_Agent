@@ -1268,3 +1268,153 @@ export const emailVerifications = mysqlTable("email_verifications", {
 
 export type EmailVerification = typeof emailVerifications.$inferSelect;
 export type InsertEmailVerification = typeof emailVerifications.$inferInsert;
+
+
+// ============================================
+// PHASE 36: Reinforcement Learning Agent
+// ============================================
+
+/**
+ * RL Agent Models - saved RL model weights and configurations
+ */
+export const rlAgentModels = mysqlTable("rl_agent_models", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  // Model configuration
+  modelData: json("modelData").notNull(), // Q-table, network weights, etc.
+  config: json("config"), // Hyperparameters
+  // Performance metrics
+  totalEpisodes: int("totalEpisodes").default(0).notNull(),
+  avgReward: decimal("avgReward", { precision: 18, scale: 6 }),
+  bestReward: decimal("bestReward", { precision: 18, scale: 6 }),
+  winRate: decimal("winRate", { precision: 5, scale: 4 }),
+  sharpeRatio: decimal("sharpeRatio", { precision: 10, scale: 4 }),
+  // Status
+  status: mysqlEnum("status", ["training", "ready", "deployed", "archived"]).default("training").notNull(),
+  lastTrainedAt: timestamp("lastTrainedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RLAgentModel = typeof rlAgentModels.$inferSelect;
+export type InsertRLAgentModel = typeof rlAgentModels.$inferInsert;
+
+/**
+ * RL Training History - training episode logs
+ */
+export const rlTrainingHistory = mysqlTable("rl_training_history", {
+  id: int("id").autoincrement().primaryKey(),
+  modelId: int("modelId").notNull(),
+  episode: int("episode").notNull(),
+  // Episode metrics
+  totalReward: decimal("totalReward", { precision: 18, scale: 6 }).notNull(),
+  avgLoss: decimal("avgLoss", { precision: 18, scale: 6 }),
+  steps: int("steps").notNull(),
+  // Trading metrics
+  trades: int("trades").default(0).notNull(),
+  winningTrades: int("winningTrades").default(0).notNull(),
+  totalReturn: decimal("totalReturn", { precision: 10, scale: 4 }),
+  maxDrawdown: decimal("maxDrawdown", { precision: 10, scale: 4 }),
+  // Exploration
+  epsilon: decimal("epsilon", { precision: 5, scale: 4 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type RLTrainingHistoryEntry = typeof rlTrainingHistory.$inferSelect;
+export type InsertRLTrainingHistoryEntry = typeof rlTrainingHistory.$inferInsert;
+
+/**
+ * RL Experiences - replay buffer storage for experience replay
+ */
+export const rlExperiences = mysqlTable("rl_experiences", {
+  id: int("id").autoincrement().primaryKey(),
+  modelId: int("modelId").notNull(),
+  // State-Action-Reward-NextState tuple
+  state: json("state").notNull(),
+  action: int("action").notNull(),
+  reward: decimal("reward", { precision: 18, scale: 6 }).notNull(),
+  nextState: json("nextState").notNull(),
+  done: boolean("done").default(false).notNull(),
+  // Metadata
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  symbol: varchar("symbol", { length: 20 }),
+  price: decimal("price", { precision: 18, scale: 6 }),
+});
+
+export type RLExperience = typeof rlExperiences.$inferSelect;
+export type InsertRLExperience = typeof rlExperiences.$inferInsert;
+
+// ============================================
+// PHASE 36: Backtesting & Strategy Comparison
+// ============================================
+
+/**
+ * Backtest Results - stored backtest runs
+ */
+export const backtestResults = mysqlTable("backtest_results", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  // Configuration
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  startDate: timestamp("startDate").notNull(),
+  endDate: timestamp("endDate").notNull(),
+  initialCapital: decimal("initialCapital", { precision: 18, scale: 2 }).notNull(),
+  strategyType: mysqlEnum("strategyType", ["standard", "enhanced", "rl", "custom"]).notNull(),
+  strategyConfig: json("strategyConfig"),
+  // Results
+  finalCapital: decimal("finalCapital", { precision: 18, scale: 2 }),
+  totalReturn: decimal("totalReturn", { precision: 10, scale: 4 }),
+  annualizedReturn: decimal("annualizedReturn", { precision: 10, scale: 4 }),
+  sharpeRatio: decimal("sharpeRatio", { precision: 10, scale: 4 }),
+  sortinoRatio: decimal("sortinoRatio", { precision: 10, scale: 4 }),
+  maxDrawdown: decimal("maxDrawdown", { precision: 10, scale: 4 }),
+  winRate: decimal("winRate", { precision: 5, scale: 4 }),
+  profitFactor: decimal("profitFactor", { precision: 10, scale: 4 }),
+  // Trade statistics
+  totalTrades: int("totalTrades").default(0).notNull(),
+  winningTrades: int("winningTrades").default(0).notNull(),
+  losingTrades: int("losingTrades").default(0).notNull(),
+  avgWin: decimal("avgWin", { precision: 18, scale: 6 }),
+  avgLoss: decimal("avgLoss", { precision: 18, scale: 6 }),
+  // Detailed data
+  equityCurve: json("equityCurve"), // Array of { date, value }
+  trades: json("trades"), // Array of trade details
+  // Status
+  status: mysqlEnum("status", ["running", "completed", "failed"]).default("running").notNull(),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+
+export type BacktestResult = typeof backtestResults.$inferSelect;
+export type InsertBacktestResult = typeof backtestResults.$inferInsert;
+
+/**
+ * Strategy Comparisons - side-by-side strategy comparisons
+ */
+export const strategyComparisons = mysqlTable("strategy_comparisons", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  // Comparison setup
+  symbol: varchar("symbol", { length: 20 }).notNull(),
+  startDate: timestamp("startDate").notNull(),
+  endDate: timestamp("endDate").notNull(),
+  initialCapital: decimal("initialCapital", { precision: 18, scale: 2 }).notNull(),
+  // Strategies being compared
+  strategies: json("strategies").notNull(), // Array of { type, config, backtestId }
+  // Comparison results
+  results: json("results"), // Comparative metrics
+  winner: varchar("winner", { length: 50 }),
+  // Status
+  status: mysqlEnum("status", ["pending", "running", "completed", "failed"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+});
+
+export type StrategyComparison = typeof strategyComparisons.$inferSelect;
+export type InsertStrategyComparison = typeof strategyComparisons.$inferInsert;

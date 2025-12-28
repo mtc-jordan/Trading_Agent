@@ -194,3 +194,58 @@ q = probability of losing (1 - p)
 
 ### Key Takeaway:
 > "Start with strategy. Don't rely on models alone. Focus on market inefficiencies and then use machine learning to fine-tune strategy development, risk management, and execution." - Stefan Jensen
+
+
+---
+
+## 10. Reinforcement Learning for Trading - Research Findings (2024-2025)
+
+### Key Algorithms for Trading
+
+**1. Deep Q-Network (DQN)**
+- Most widely used for discrete action spaces (buy/sell/hold)
+- Double DQN addresses Q-value overestimation
+- Experience replay improves sample efficiency
+- Target network stabilizes training
+- Best for: Single asset trading with discrete actions
+
+**2. Proximal Policy Optimization (PPO)**
+- Actor-critic method with clipped objective
+- More stable than vanilla policy gradient
+- Handles continuous action spaces (position sizing)
+- Better for portfolio optimization
+- Best for: Multi-asset portfolios, continuous position sizing
+
+**3. Asynchronous Advantage Actor-Critic (A3C)**
+- Parallel training across multiple environments
+- Faster convergence than DQN
+- Good for high-frequency trading
+- Best for: Real-time trading systems
+
+### State Space Design (Best Practices)
+
+1. **Price Features**: OHLCV, Returns (1-day, 5-day, 20-day), Volatility (rolling std)
+2. **Technical Indicators**: RSI, MACD, Bollinger Bands %B, ADX, ATR
+3. **Market Context**: Market regime, Sector performance, VIX level
+4. **Position Context**: Current position, Unrealized P&L, Time in position
+
+### Action Space Design
+
+**Discrete Actions (DQN)**: Hold, Buy (full), Sell (close), or extended with partial positions
+**Continuous Actions (PPO)**: Position target [-1, 1] for gradual position building
+
+### Reward Function Design (Critical)
+
+Based on arXiv 2506.04358v1 "Risk-Aware RL Reward":
+
+```
+R = α * Return + β * Risk_Penalty + γ * Transaction_Cost + δ * Holding_Bonus
+```
+
+Recommended Weights: α=1.0, β=0.5, γ=0.1, δ=0.01
+
+### Training Best Practices
+
+- **Data Split**: Training 70%, Validation 15%, Testing 15%
+- **Episode Length**: 252 trading days (1 year)
+- **DQN Hyperparameters**: LR=0.0001, γ=0.99, ε-decay=0.995, Buffer=100K, Batch=64

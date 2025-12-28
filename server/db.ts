@@ -1903,3 +1903,103 @@ export async function isUserEmailVerified(userId: number): Promise<boolean> {
   const verification = await getEmailVerificationByUserId(userId);
   return verification?.isVerified === true;
 }
+
+
+// ==================== RL AGENT OPERATIONS ====================
+import { rlAgentModels, strategyComparisons, InsertStrategyComparison, StrategyComparison, RLAgentModel } from "../drizzle/schema";
+
+export async function getUserRLModels(userId: number, limit: number = 20): Promise<RLAgentModel[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const results = await db.select()
+    .from(rlAgentModels)
+    .where(eq(rlAgentModels.userId, userId))
+    .orderBy(desc(rlAgentModels.createdAt))
+    .limit(limit);
+  
+  return results;
+}
+
+export async function getRLModelById(modelId: number, userId: number): Promise<RLAgentModel | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const [result] = await db.select()
+    .from(rlAgentModels)
+    .where(and(
+      eq(rlAgentModels.id, modelId),
+      eq(rlAgentModels.userId, userId)
+    ));
+  
+  return result;
+}
+
+export async function updateRLModel(modelId: number, data: Partial<RLAgentModel>): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(rlAgentModels)
+    .set(data)
+    .where(eq(rlAgentModels.id, modelId));
+}
+
+// ==================== STRATEGY COMPARISON OPERATIONS ====================
+
+export async function saveStrategyComparison(data: {
+  userId: number;
+  name: string;
+  symbol: string;
+  startDate: Date;
+  endDate: Date;
+  initialCapital: number;
+  strategies: { type: string }[];
+  results: Record<string, unknown>;
+  winner: string;
+}): Promise<{ id: number } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  
+  const [result] = await db.insert(strategyComparisons).values({
+    userId: data.userId,
+    name: data.name,
+    symbol: data.symbol,
+    startDate: data.startDate,
+    endDate: data.endDate,
+    initialCapital: data.initialCapital.toString(),
+    strategies: data.strategies,
+    results: data.results,
+    winner: data.winner,
+    status: 'completed',
+    completedAt: new Date(),
+  });
+  
+  return { id: Number(result.insertId) };
+}
+
+export async function getUserStrategyComparisons(userId: number, limit: number = 20): Promise<StrategyComparison[]> {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const results = await db.select()
+    .from(strategyComparisons)
+    .where(eq(strategyComparisons.userId, userId))
+    .orderBy(desc(strategyComparisons.createdAt))
+    .limit(limit);
+  
+  return results;
+}
+
+export async function getStrategyComparisonById(comparisonId: number, userId: number): Promise<StrategyComparison | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const [result] = await db.select()
+    .from(strategyComparisons)
+    .where(and(
+      eq(strategyComparisons.id, comparisonId),
+      eq(strategyComparisons.userId, userId)
+    ));
+  
+  return result;
+}
