@@ -1,0 +1,2 @@
+ALTER TABLE `broker_connections` MODIFY COLUMN `brokerType` enum('alpaca','interactive_brokers','binance','coinbase','schwab') NOT NULL;--> statement-breakpoint
+ALTER TABLE `oauth_states` MODIFY COLUMN `brokerType` enum('alpaca','interactive_brokers','binance','coinbase','schwab') NOT NULL;

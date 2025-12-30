@@ -1,0 +1,19 @@
+{
+  "query": "SELECT id, userId, brokerType, isPaper, isActive, accountId, lastConnectedAt FROM broker_connections LIMIT 10;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2JvR2JmsVzzzo8g.542b2be615eb --database cYbBY4G8kX53fA5ZWwbsKK --execute SELECT id, userId, brokerType, isPaper, isActive, accountId, lastConnectedAt FROM broker_connections LIMIT 10;",
+  "rows": [
+    {
+      "id": "3f29b4e2-e586-4965-8cc3-fe39f6559dcc",
+      "userId": "1",
+      "brokerType": "alpaca",
+      "isPaper": "1",
+      "isActive": "1",
+      "accountId": "ALPACA-QL7T1FSYI",
+      "lastConnectedAt": "2025-12-29 23:22:27"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\tuserId\tbrokerType\tisPaper\tisActive\taccountId\tlastConnectedAt\n3f29b4e2-e586-4965-8cc3-fe39f6559dcc\t1\talpaca\t1\t1\tALPACA-QL7T1FSYI\t2025-12-29 23:22:27\n",
+  "stderr": "",
+  "execution_time_ms": 1517
+}
