@@ -16,6 +16,7 @@ import { LivePriceTicker, MiniPriceTicker } from '@/components/LivePriceTicker';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
 import { CorrelationMatrix } from '@/components/CorrelationMatrix';
 import { PortfolioOptimizer } from '@/components/PortfolioOptimizer';
+import { AdvancedAIAnalysisDashboard } from '@/components/AdvancedAIAnalysisDashboard';
 
 type AssetType = 'stock' | 'crypto' | 'options' | 'forex' | 'commodity';
 type SignalStrength = 'strong_buy' | 'buy' | 'hold' | 'sell' | 'strong_sell';
@@ -227,6 +228,22 @@ export default function MultiAssetAnalysis() {
 
         {/* Portfolio Optimizer */}
         <PortfolioOptimizer />
+
+        {/* Advanced AI Analysis Dashboard */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Advanced AI Analysis</CardTitle>
+            <CardDescription>
+              Multi-agent analysis with explainability, alternative data, and RL strategies
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AdvancedAIAnalysisDashboard 
+              symbol={symbol || 'AAPL'} 
+              assetType={assetType === 'options' ? 'option' : assetType as 'stock' | 'crypto' | 'option' | 'forex' | 'commodity'}
+            />
+          </CardContent>
+        </Card>
 
         <Tabs value={assetType} onValueChange={(v) => setAssetType(v as AssetType)}>
           <TabsList className="grid w-full grid-cols-5">
