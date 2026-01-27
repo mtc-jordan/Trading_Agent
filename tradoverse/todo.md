@@ -1477,3 +1477,15 @@
 
 ## Phase 41: Navigation Fix
 - [x] Add Multi-Asset Analysis to sidebar navigation menu (under AI Analysis group with 'New' badge)
+
+## Phase 42: Cross-Asset Correlation Matrix
+- [x] Create correlation calculation service with rolling window support (24h, 7d, 30d)
+- [x] Implement Pearson correlation coefficient calculation for price returns
+- [x] Add tRPC endpoints for fetching correlation data
+- [x] Build CorrelationMatrix heatmap component with color-coded cells
+- [x] Add time period selector (24h, 7d, 30d)
+- [x] Implement hover tooltips showing exact correlation values
+- [x] Integrate correlation matrix into Multi-Asset Analysis page
+- [x] Add correlation strength indicators (strong positive/negative, weak, neutral)
+- [x] Add metadata summary (total pairs, avg correlation, strongest +/-)
+- [x] Write comprehensive tests for correlation service (31 tests passing)

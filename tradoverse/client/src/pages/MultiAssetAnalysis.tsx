@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { LivePriceTicker, MiniPriceTicker } from '@/components/LivePriceTicker';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
+import { CorrelationMatrix } from '@/components/CorrelationMatrix';
 
 type AssetType = 'stock' | 'crypto' | 'options' | 'forex' | 'commodity';
 type SignalStrength = 'strong_buy' | 'buy' | 'hold' | 'sell' | 'strong_sell';
@@ -212,6 +213,16 @@ export default function MultiAssetAnalysis() {
             </CardContent>
           </Card>
         )}
+
+        {/* Cross-Asset Correlation Matrix */}
+        <CorrelationMatrix
+          symbols={['AAPL', 'MSFT', 'GOOGL', 'BTC', 'ETH', 'GOLD', 'EUR/USD']}
+          assetTypes={['stock', 'stock', 'stock', 'crypto', 'crypto', 'commodity', 'forex']}
+          defaultPeriod="7d"
+          onCellClick={(asset1, asset2, correlation) => {
+            console.log(`Correlation between ${asset1} and ${asset2}: ${correlation}`);
+          }}
+        />
 
         <Tabs value={assetType} onValueChange={(v) => setAssetType(v as AssetType)}>
           <TabsList className="grid w-full grid-cols-5">

@@ -7432,6 +7432,115 @@ export const appRouter = router({
         return realtimePriceFeed.refreshPrice(input.symbol);
       }),
   }),
+
+  // Cross-Asset Correlation Router
+  correlation: router({
+    // Get correlation matrix for specified assets
+    getMatrix: publicProcedure
+      .input(z.object({
+        symbols: z.array(z.string()).min(2).max(20),
+        assetTypes: z.array(z.enum(['stock', 'crypto', 'forex', 'commodity', 'option'])).optional(),
+        period: z.enum(['24h', '7d', '30d']).default('7d'),
+      }))
+      .query(async ({ input }) => {
+        const correlationService = await import('./services/correlationService');
+        
+        // Get or generate price histories for requested symbols
+        const assets = input.symbols.map((symbol, index) => {
+          const assetType = input.assetTypes?.[index] || 'stock';
+          let history = correlationService.getPriceHistory(symbol, assetType);
+          
+          if (!history) {
+            // Generate simulated data if not in cache
+            const basePrice = assetType === 'crypto' ? 1000 + Math.random() * 50000 : 100 + Math.random() * 400;
+            const volatility = assetType === 'crypto' ? 0.03 : 0.015;
+            history = correlationService.generateSimulatedPriceHistory(symbol, assetType, basePrice, volatility);
+          }
+          
+          return history;
+        });
+        
+        return correlationService.calculateCorrelationMatrix(assets, input.period);
+      }),
+
+    // Get correlation between two specific assets
+    getPairCorrelation: publicProcedure
+      .input(z.object({
+        asset1: z.object({
+          symbol: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'forex', 'commodity', 'option']),
+        }),
+        asset2: z.object({
+          symbol: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'forex', 'commodity', 'option']),
+        }),
+        period: z.enum(['24h', '7d', '30d']).default('7d'),
+      }))
+      .query(async ({ input }) => {
+        const correlationService = await import('./services/correlationService');
+        
+        let history1 = correlationService.getPriceHistory(input.asset1.symbol, input.asset1.assetType);
+        let history2 = correlationService.getPriceHistory(input.asset2.symbol, input.asset2.assetType);
+        
+        if (!history1) {
+          const basePrice = input.asset1.assetType === 'crypto' ? 10000 : 150;
+          history1 = correlationService.generateSimulatedPriceHistory(
+            input.asset1.symbol, input.asset1.assetType, basePrice, 0.02
+          );
+        }
+        
+        if (!history2) {
+          const basePrice = input.asset2.assetType === 'crypto' ? 10000 : 150;
+          history2 = correlationService.generateSimulatedPriceHistory(
+            input.asset2.symbol, input.asset2.assetType, basePrice, 0.02
+          );
+        }
+        
+        return correlationService.calculateAssetCorrelation(history1, history2, input.period);
+      }),
+
+    // Seed demo correlation data
+    seedDemoData: publicProcedure
+      .mutation(async () => {
+        const correlationService = await import('./services/correlationService');
+        correlationService.seedDemoCorrelationData();
+        return { success: true, message: 'Demo correlation data seeded successfully' };
+      }),
+
+    // Get available assets with price history
+    getAvailableAssets: publicProcedure
+      .query(async () => {
+        const correlationService = await import('./services/correlationService');
+        const assets = correlationService.getCachedAssets();
+        return assets.map(a => ({
+          symbol: a.symbol,
+          assetType: a.assetType,
+          dataPoints: a.prices.length,
+          latestPrice: a.prices[a.prices.length - 1]?.price || 0,
+          oldestTimestamp: a.prices[0]?.timestamp || 0,
+          newestTimestamp: a.prices[a.prices.length - 1]?.timestamp || 0,
+        }));
+      }),
+
+    // Get correlation color for visualization
+    getCorrelationColor: publicProcedure
+      .input(z.object({ correlation: z.number().min(-1).max(1) }))
+      .query(async ({ input }) => {
+        const correlationService = await import('./services/correlationService');
+        return {
+          color: correlationService.getCorrelationColor(input.correlation),
+          strength: correlationService.getCorrelationStrength(input.correlation),
+        };
+      }),
+
+    // Clear correlation cache
+    clearCache: protectedProcedure
+      .mutation(async () => {
+        const correlationService = await import('./services/correlationService');
+        correlationService.clearPriceHistoryCache();
+        return { success: true, message: 'Correlation cache cleared' };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
