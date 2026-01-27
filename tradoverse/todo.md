@@ -1436,3 +1436,10 @@
 - [x] Add sentiment caching to avoid redundant LLM calls
 - [x] Display confidence score for sentiment predictions
 - [x] Write tests for sentiment analysis feature (18 tests passing)
+
+## Phase 37: News Sentiment Filtering
+- [x] Add sentiment filter buttons to MarketNewsFeed header
+- [x] Implement filtering logic for bullish/bearish/neutral articles
+- [x] Show filter state in UI with clear indication (colored badges with counts)
+- [x] Update article count to reflect filtered results
+- [x] Add empty state with clear filter button when no articles match

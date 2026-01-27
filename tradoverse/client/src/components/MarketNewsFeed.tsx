@@ -391,6 +391,7 @@ export function MarketNewsFeed({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'watchlist' | 'trending'>('all');
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [selectedSentiment, setSelectedSentiment] = useState<'all' | 'bullish' | 'bearish' | 'neutral'>('all');
   const [sentimentMap, setSentimentMap] = useState<Map<string, SentimentResult>>(new Map());
   const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
   const [aiEnabled, setAiEnabled] = useState(true);
@@ -497,8 +498,16 @@ export function MarketNewsFeed({
       news = news.filter(article => article.source === selectedSource);
     }
     
+    // Apply sentiment filter
+    if (selectedSentiment !== 'all') {
+      news = news.filter(article => {
+        const sentiment = sentimentMap.get(article.id);
+        return sentiment?.sentiment === selectedSentiment;
+      });
+    }
+    
     return news;
-  }, [activeTab, allNews, watchlistNews, searchQuery, selectedSource]);
+  }, [activeTab, allNews, watchlistNews, searchQuery, selectedSource, selectedSentiment, sentimentMap]);
   
   // Sentiment statistics
   const sentimentStats = useMemo(() => {
@@ -594,26 +603,67 @@ export function MarketNewsFeed({
             </div>
           </div>
           
-          {/* Sentiment Summary Bar */}
-          {aiEnabled && sentimentStats.total > 0 && (
-            <div className="flex items-center gap-3 mt-3 p-2 rounded-lg bg-muted/50">
-              <Brain className="h-4 w-4 text-primary" />
-              <span className="text-xs text-muted-foreground">Sentiment:</span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-green-500 flex items-center gap-1">
-                  <TrendingUp className="h-3 w-3" />
-                  {sentimentStats.bullish} Bullish
-                </span>
-                <span className="text-xs text-muted-foreground">•</span>
-                <span className="text-xs text-red-500 flex items-center gap-1">
-                  <TrendingDown className="h-3 w-3" />
-                  {sentimentStats.bearish} Bearish
-                </span>
-                <span className="text-xs text-muted-foreground">•</span>
-                <span className="text-xs text-gray-400 flex items-center gap-1">
-                  <Minus className="h-3 w-3" />
-                  {sentimentStats.neutral} Neutral
-                </span>
+          {/* Sentiment Filter Bar */}
+          {aiEnabled && (
+            <div className="flex items-center gap-2 mt-3 p-2 rounded-lg bg-muted/50">
+              <Brain className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="text-xs text-muted-foreground">Filter:</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Button
+                  variant={selectedSentiment === 'all' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`h-7 px-2.5 text-xs ${selectedSentiment === 'all' ? 'bg-primary/90' : ''}`}
+                  onClick={() => setSelectedSentiment('all')}
+                >
+                  All
+                  {sentimentStats.total > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0">
+                      {sentimentStats.total}
+                    </Badge>
+                  )}
+                </Button>
+                <Button
+                  variant={selectedSentiment === 'bullish' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`h-7 px-2.5 text-xs ${selectedSentiment === 'bullish' ? 'bg-green-600 hover:bg-green-700' : 'text-green-500 hover:text-green-400 hover:bg-green-500/10'}`}
+                  onClick={() => setSelectedSentiment('bullish')}
+                >
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  Bullish
+                  {sentimentStats.bullish > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 bg-green-500/20">
+                      {sentimentStats.bullish}
+                    </Badge>
+                  )}
+                </Button>
+                <Button
+                  variant={selectedSentiment === 'bearish' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`h-7 px-2.5 text-xs ${selectedSentiment === 'bearish' ? 'bg-red-600 hover:bg-red-700' : 'text-red-500 hover:text-red-400 hover:bg-red-500/10'}`}
+                  onClick={() => setSelectedSentiment('bearish')}
+                >
+                  <TrendingDown className="h-3 w-3 mr-1" />
+                  Bearish
+                  {sentimentStats.bearish > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 bg-red-500/20">
+                      {sentimentStats.bearish}
+                    </Badge>
+                  )}
+                </Button>
+                <Button
+                  variant={selectedSentiment === 'neutral' ? 'default' : 'ghost'}
+                  size="sm"
+                  className={`h-7 px-2.5 text-xs ${selectedSentiment === 'neutral' ? 'bg-gray-600 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-300 hover:bg-gray-500/10'}`}
+                  onClick={() => setSelectedSentiment('neutral')}
+                >
+                  <Minus className="h-3 w-3 mr-1" />
+                  Neutral
+                  {sentimentStats.neutral > 0 && (
+                    <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0 bg-gray-500/20">
+                      {sentimentStats.neutral}
+                    </Badge>
+                  )}
+                </Button>
               </div>
               {analyzeSentimentMutation.isPending && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1 ml-auto">
@@ -673,8 +723,22 @@ export function MarketNewsFeed({
                   <Newspaper className="h-12 w-12 text-muted-foreground/50 mb-4" />
                   <p className="text-muted-foreground">No news found</p>
                   <p className="text-xs text-muted-foreground/70 mt-1">
-                    {searchQuery ? 'Try a different search term' : 'Check back later for updates'}
+                    {selectedSentiment !== 'all' 
+                      ? `No ${selectedSentiment} articles found. Try a different sentiment filter.`
+                      : searchQuery 
+                        ? 'Try a different search term' 
+                        : 'Check back later for updates'}
                   </p>
+                  {selectedSentiment !== 'all' && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-3 text-xs"
+                      onClick={() => setSelectedSentiment('all')}
+                    >
+                      Clear sentiment filter
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className={compact ? 'divide-y divide-border/50' : 'space-y-3'}>
@@ -697,6 +761,11 @@ export function MarketNewsFeed({
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/50">
             <p className="text-xs text-muted-foreground">
               Showing {filteredNews.length} articles
+              {selectedSentiment !== 'all' && (
+                <span className={`ml-1 ${selectedSentiment === 'bullish' ? 'text-green-500' : selectedSentiment === 'bearish' ? 'text-red-500' : 'text-gray-400'}`}>
+                  ({selectedSentiment})
+                </span>
+              )}
               {selectedSource && ` from ${selectedSource}`}
             </p>
             <div className="flex items-center gap-2">
