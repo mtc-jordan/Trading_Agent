@@ -6656,6 +6656,31 @@ export const appRouter = router({
         return analyzeKeywordSentiment(input.headline);
       }),
 
+    // Sentiment Trend Data
+    getSentimentTrend: protectedProcedure
+      .input(z.object({
+        period: z.enum(['24h', '7d']),
+      }))
+      .query(async ({ input }) => {
+        const { getSentimentTrendWithFallback } = await import('./services/sentimentTrendService');
+        return getSentimentTrendWithFallback(input.period);
+      }),
+
+    // Record sentiment for trend tracking
+    recordSentimentForTrend: protectedProcedure
+      .input(z.object({
+        articles: z.array(z.object({
+          id: z.string(),
+          sentiment: z.enum(['bullish', 'bearish', 'neutral']),
+          timestamp: z.number().optional(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        const { recordSentimentBatch } = await import('./services/sentimentTrendService');
+        recordSentimentBatch(input.articles);
+        return { success: true, recorded: input.articles.length };
+      }),
+
     // Trading - Orders
     placeOrder: protectedProcedure
       .input(z.object({

@@ -1443,3 +1443,11 @@
 - [x] Show filter state in UI with clear indication (colored badges with counts)
 - [x] Update article count to reflect filtered results
 - [x] Add empty state with clear filter button when no articles match
+
+## Phase 38: Sentiment Trend Chart
+- [x] Create sentiment trend tracking service to aggregate historical sentiment data
+- [x] Add tRPC endpoint for fetching sentiment trends (24h/7d)
+- [x] Build SentimentTrendChart component with stacked bar chart visualization
+- [x] Add time period toggle (24h/7d) with smooth transitions
+- [x] Integrate SentimentTrendMini chart into MarketNewsFeed header section
+- [x] Show bullish/bearish/neutral distribution over time with donut summary

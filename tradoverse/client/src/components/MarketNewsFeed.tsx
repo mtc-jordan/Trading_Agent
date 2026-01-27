@@ -41,6 +41,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { SentimentTrendMini } from '@/components/SentimentTrendChart';
 
 interface NewsArticle {
   id: string;
@@ -671,6 +672,13 @@ export function MarketNewsFeed({
                   Analyzing...
                 </span>
               )}
+            </div>
+          )}
+          
+          {/* Sentiment Trend Chart */}
+          {aiEnabled && (
+            <div className="mt-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
+              <SentimentTrendMini />
             </div>
           )}
           
