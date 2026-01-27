@@ -6806,6 +6806,13 @@ export const appRouter = router({
         return adapter.getAccount();
       }),
 
+    getAccountBalance: protectedProcedure
+      .query(async () => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getAccountBalance();
+      }),
+
     getPortfolioHistory: protectedProcedure
       .input(z.object({
         period: z.enum(['1D', '1W', '1M', '3M', '6M', '1A', 'all']).optional(),
@@ -6859,6 +6866,60 @@ export const appRouter = router({
         const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
         const adapter = new AlpacaBrokerAdapter();
         return adapter.getCalendar(input.start, input.end);
+      }),
+
+    // Last Closing Prices (for when market is closed)
+    getLastClosingPrices: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        
+        const results = await Promise.all(
+          input.symbols.map(async (symbol) => {
+            try {
+              // Get the latest bar data which includes close prices
+              // Calculate start date as 7 days ago to ensure we get at least 2 trading days
+              const startDate = new Date();
+              startDate.setDate(startDate.getDate() - 7);
+              
+              const bars = await adapter.getBars({
+                symbol,
+                timeframe: '1Day',
+                start: startDate,
+                limit: 5, // Get last 5 days to ensure we have enough data
+              });
+              
+              if (bars.length >= 1) {
+                const latestBar = bars[bars.length - 1];
+                const previousBar = bars.length >= 2 ? bars[bars.length - 2] : null;
+                
+                const close = latestBar.close;
+                const previousClose = previousBar?.close || latestBar.open;
+                const change = close - previousClose;
+                const changePercent = previousClose ? (change / previousClose) * 100 : 0;
+                
+                return {
+                  symbol: symbol.toUpperCase(),
+                  close,
+                  previousClose,
+                  change,
+                  changePercent,
+                  volume: latestBar.volume,
+                  timestamp: latestBar.timestamp,
+                };
+              }
+              return null;
+            } catch (error) {
+              console.error(`Error fetching closing price for ${symbol}:`, error);
+              return null;
+            }
+          })
+        );
+        
+        return results.filter((r): r is NonNullable<typeof r> => r !== null);
       }),
 
     // Watchlists

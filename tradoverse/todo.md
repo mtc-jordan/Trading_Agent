@@ -1312,3 +1312,119 @@
 - [ ] Show alert history with triggered alerts
 - [ ] Add enable/disable toggle for each alert
 - [ ] Implement alert deletion with confirmation
+
+## Bug Fixes - Phase 29
+- [x] Fix Dashboard showing $0.00 for Portfolio Value, Buying Power, Day P/L, Cash Balance when Alpaca is connected
+
+## Bug Fixes - Phase 30
+- [ ] Fix Alpaca WebSocket stream showing as Disconnected
+- [ ] Ensure real-time price streaming works properly
+
+## Phase 31: Market Status Indicator
+- [x] Create MarketStatusIndicator component with visual styling
+- [x] Add market clock API endpoint using Alpaca's getClock
+- [x] Integrate indicator into Dashboard header
+- [x] Show countdown to next market open/close
+
+## Phase 32: Market Enhancements
+- [x] Add market holiday detection using Alpaca calendar API
+- [x] Show upcoming market holidays and early close days
+- [x] Display last closing prices when market is closed
+- [x] Add price alerts for market open with overnight summary
+- [x] Create notification system for market open alerts
+
+
+## Phase 33: Multi-Asset Trading System (Stocks, Crypto, Options)
+
+### Architecture & Context
+- [x] Create AssetClassContext for global asset class selection (stocks, crypto, options)
+- [x] Create AssetClassSelector component with visual tabs
+- [x] Store selected asset class in localStorage for persistence
+- [x] Update BrokerContext to expose asset class capabilities per broker
+
+### Stocks & ETFs Enhancements
+- [x] Stock trading with market status indicator
+- [x] Popular stocks display (AAPL, GOOGL, MSFT, TSLA, AMZN, NVDA, META, AMD)
+- [x] Watchlist functionality with add/remove
+- [x] Real-time quote display with price, change, volume
+- [ ] Add ETF-specific data display (expense ratio, holdings, AUM) - future
+- [ ] Add stock screener with filters (sector, market cap, P/E ratio) - future
+
+### Cryptocurrency Trading (24/7)
+- [x] Create CryptoTradingPage with 24/7 market indicator
+- [x] Add supported crypto pairs display (BTC/USD, ETH/USD, SOL/USD, DOGE/USD, etc.)
+- [x] Implement crypto-specific order types
+- [x] Add crypto market data streaming
+- [x] Display crypto-specific metrics (price, change, volume, high, low)
+- [x] Add crypto watchlist functionality
+
+### Options Trading
+- [x] Create OptionsChainViewer component
+- [x] Display options chain with calls/puts selector
+- [x] Add strike price selector with expiration dates
+- [x] Options order placement form
+- [ ] Implement Greeks calculator (Delta, Gamma, Theta, Vega, Rho) - future
+- [ ] Create options P/L calculator - future
+- [ ] Add implied volatility display - future
+
+### Unified Trading Interface
+- [x] Create MultiAssetTrading page with asset class tabs
+- [x] Dynamic order form based on asset class
+- [x] Asset-specific market data display
+- [x] Unified positions view across all asset classes
+- [x] Account info display (buying power, cash, portfolio value)
+- [x] Add navigation link to sidebar with "New" badge
+
+### Testing
+- [ ] Write tests for multi-asset features - future
+- [x] Manual testing of asset class switching
+- [x] Verify order routing per asset class
+
+
+## Phase 34: Multi-Broker Asset Class Support
+
+### Broker Capabilities Definition
+- [x] Define broker capabilities interface (supportedAssetClasses, tradingHours, orderTypes)
+- [x] Create broker registry with capability metadata (shared/brokerCapabilities.ts)
+- [x] Add asset class availability per broker (Alpaca: stocks, crypto, options)
+- [ ] Store broker capabilities in database for dynamic updates (future)
+
+### Multi-Broker Asset Class Switching
+- [x] Show broker selector when multiple brokers support same asset class
+- [x] Auto-switch to appropriate broker when changing asset class
+- [x] Display broker badge on asset class tabs showing which broker handles it
+- [x] Handle case when no broker supports selected asset class
+
+### Broker Comparison View
+- [x] Create BrokerCapabilities component showing supported features
+- [x] Display asset class support matrix (broker vs asset class)
+- [x] Show trading hours per broker per asset class
+- [x] Display commission/fee structure per broker (Fees tab)
+- [x] Create BrokerComparison page with Overview, Fees, Features, Asset Classes tabs
+- [x] Add Compare Brokers link to sidebar navigation
+
+### Future Broker Integration Templates
+- [x] Create IBrokerAdapter interface for standardized broker integration
+- [x] Add placeholder for Interactive Brokers integration (Coming Soon)
+- [x] Add placeholder for Binance integration (Coming Soon)
+- [x] Add placeholder for Coinbase integration (Coming Soon)
+- [x] Add placeholder for Charles Schwab integration (Coming Soon)
+- [ ] Document broker integration process (future)
+
+### Aggregated Multi-Broker Views
+- [x] Aggregate positions across all connected brokers (in MultiAssetTrading)
+- [x] Aggregate portfolio value across all brokers (in BrokerContext)
+- [x] Show broker source for each position
+- [ ] Enable cross-broker portfolio analytics (future)
+
+
+## Phase 35: Market News Feed
+- [x] Add Alpaca News API endpoint to server router (already exists)
+- [x] Create MarketNewsFeed component with modern UI
+- [x] Display news for watched symbols and market updates
+- [x] Add news filtering by symbol and category (tabs: All News, Watchlist, Trending)
+- [x] Add search functionality for news articles
+- [x] Integrate news feed into Dashboard
+- [x] Show article thumbnails, headlines, sources, timestamps
+- [x] Display related stock symbols for each article
+- [ ] Add voice command support for news navigation (future)

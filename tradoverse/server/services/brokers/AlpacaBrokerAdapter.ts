@@ -223,6 +223,20 @@ export class AlpacaBrokerAdapter implements IBrokerService {
   readonly brokerType = BrokerType.ALPACA;
   readonly brokerName = 'Alpaca Markets';
   
+  constructor() {
+    // Initialize from environment variables if available
+    const apiKey = process.env.ALPACA_API_KEY || '';
+    const apiSecret = process.env.ALPACA_API_SECRET || '';
+    
+    if (apiKey && apiSecret) {
+      this.apiKey = apiKey;
+      this.apiSecret = apiSecret;
+      this.isPaper = apiKey.startsWith('PK') || apiKey.includes('paper');
+      this.baseUrl = this.isPaper ? ALPACA_PAPER_BASE_URL : ALPACA_LIVE_BASE_URL;
+      this.connected = true;
+    }
+  }
+  
   readonly capabilities: BrokerCapabilities = {
     supportedAssetClasses: [AssetClass.US_EQUITY, AssetClass.CRYPTO, AssetClass.OPTIONS],
     supportedOrderTypes: [
@@ -1186,19 +1200,19 @@ export class AlpacaBrokerAdapter implements IBrokerService {
   // Calendar & Clock Methods
   // ============================================================================
 
-  async getClock(): Promise<any> {
+  async getClock(): Promise<{
+    timestamp: string;
+    is_open: boolean;
+    next_open: string;
+    next_close: string;
+  }> {
     const response = await this.request('/v2/clock') as {
       timestamp: string;
       is_open: boolean;
       next_open: string;
       next_close: string;
     };
-    return {
-      timestamp: new Date(response.timestamp),
-      isOpen: response.is_open,
-      nextOpen: new Date(response.next_open),
-      nextClose: new Date(response.next_close),
-    };
+    return response;
   }
 
   async getCalendar(start?: string, end?: string): Promise<any[]> {

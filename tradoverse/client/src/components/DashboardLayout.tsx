@@ -135,6 +135,7 @@ const navigationGroups: NavGroup[] = [
     icon: TrendingUp,
     defaultOpen: true,
     items: [
+      { id: "multi-asset", icon: Layers, iconName: "Layers", label: "Multi-Asset Trading", path: "/multi-asset-trading", badge: "New" },
       { id: "paper-trading", icon: Wallet, iconName: "Wallet", label: "Paper Trading", path: "/paper-trading" },
       { id: "crypto", icon: Bitcoin, iconName: "Bitcoin", label: "Crypto Trading", path: "/crypto" },
       { id: "copy-trading", icon: Copy, iconName: "Copy", label: "Copy Trading", path: "/copy-trading" },
@@ -181,6 +182,7 @@ const navigationGroups: NavGroup[] = [
     icon: Link2,
     items: [
       { id: "brokers", icon: Building2, iconName: "Building2", label: "Brokers", path: "/brokers" },
+      { id: "broker-comparison", icon: Scale, iconName: "Scale", label: "Compare Brokers", path: "/broker-comparison" },
       { id: "order-history", icon: History, iconName: "History", label: "Order History", path: "/order-history" },
       { id: "broker-analytics", icon: BarChart3, iconName: "BarChart3", label: "Analytics", path: "/broker-analytics" },
     ],

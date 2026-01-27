@@ -5,6 +5,7 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { BrokerProvider } from "./contexts/BrokerContext";
+import { AssetClassProvider } from "./contexts/AssetClassContext";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Analysis from "./pages/Analysis";
@@ -60,6 +61,8 @@ import StrategyAlerts from "./pages/StrategyAlerts";
 import BrokerConnect from "./pages/BrokerConnect";
 import UnifiedTrading from "./pages/UnifiedTrading";
 import WatchlistAlerts from "./pages/WatchlistAlerts";
+import MultiAssetTrading from "./pages/MultiAssetTrading";
+import BrokerComparison from "./pages/BrokerComparison";
 
 function Router() {
   return (
@@ -96,6 +99,7 @@ function Router() {
       <Route path="/copy-trading" component={CopyTrading} />
       <Route path="/journal" component={TradingJournal} />
       <Route path="/brokers" component={BrokerConnect} />
+      <Route path="/broker-comparison" component={BrokerComparison} />
       <Route path="/order-history" component={OrderHistory} />
       <Route path="/broker-analytics" component={BrokerAnalytics} />
       <Route path="/rebalancing" component={PortfolioRebalancing} />
@@ -118,6 +122,7 @@ function Router() {
       <Route path="/strategy-alerts" component={StrategyAlerts} />
       <Route path="/broker-connect" component={BrokerConnect} />
       <Route path="/unified-trading" component={UnifiedTrading} />
+      <Route path="/multi-asset-trading" component={MultiAssetTrading} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -129,10 +134,12 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <BrokerProvider>
-          <TooltipProvider>
+          <AssetClassProvider>
+            <TooltipProvider>
             <Toaster />
             <Router />
           </TooltipProvider>
+            </AssetClassProvider>
         </BrokerProvider>
       </ThemeProvider>
     </ErrorBoundary>

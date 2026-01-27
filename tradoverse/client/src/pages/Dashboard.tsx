@@ -16,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
 import { ConnectionStatus, AlpacaStreamStatus } from "@/components/ConnectionStatus";
+import { MarketStatusCard, MarketStatusIndicator } from "@/components/MarketStatusIndicator";
+import { MarketNewsFeed } from "@/components/MarketNewsFeed";
 import { PriceTicker } from "@/components/LivePriceDisplay";
 import { 
   ArrowDown, 
@@ -101,9 +103,70 @@ export default function Dashboard() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [positionsLoading, setPositionsLoading] = useState(false);
   
-  // Placeholder functions for refetch
-  const refetchAccount = async () => {};
-  const refetchPositions = async () => {};
+  // Fetch Alpaca account balance data
+  const { data: alpacaBalance, refetch: refetchAlpacaBalance, isLoading: isLoadingAlpacaBalance } = 
+    trpc.alpaca.getAccountBalance.useQuery(
+      undefined,
+      { 
+        enabled: !!activeBroker && activeBroker.brokerType === 'alpaca',
+        refetchInterval: 30000, // Refresh every 30 seconds
+        retry: 2
+      }
+    );
+  
+  // Fetch Alpaca positions
+  const { data: alpacaPositions, refetch: refetchAlpacaPositions, isLoading: isLoadingAlpacaPositions } = 
+    trpc.alpaca.getPositions.useQuery(
+      { connectionId: activeBroker?.id },
+      { 
+        enabled: !!activeBroker && activeBroker.brokerType === 'alpaca',
+        refetchInterval: 30000,
+        retry: 2
+      }
+    );
+  
+  // Update broker account when Alpaca balance data changes
+  useEffect(() => {
+    if (alpacaBalance && activeBroker?.brokerType === 'alpaca') {
+      const equity = alpacaBalance.equity || 0;
+      const lastEquity = alpacaBalance.lastEquity || equity;
+      const dayPnL = equity - lastEquity;
+      const dayPnLPercent = lastEquity > 0 ? (dayPnL / lastEquity) * 100 : 0;
+      
+      setBrokerAccount({
+        equity: equity,
+        cash: alpacaBalance.cash || 0,
+        buyingPower: alpacaBalance.buyingPower || 0,
+        portfolioValue: alpacaBalance.portfolioValue || equity,
+        dayPnL: dayPnL,
+        dayPnLPercent: dayPnLPercent,
+        totalPnL: 0,
+        totalPnLPercent: 0,
+      });
+      setAccountLoading(false);
+    }
+  }, [alpacaBalance, activeBroker]);
+  
+  // Update broker positions when Alpaca positions change
+  useEffect(() => {
+    if (alpacaPositions && activeBroker?.brokerType === 'alpaca') {
+      setBrokerPositions(alpacaPositions);
+      setPositionsLoading(false);
+    }
+  }, [alpacaPositions, activeBroker]);
+  
+  // Refetch functions
+  const refetchAccount = async () => {
+    if (activeBroker?.brokerType === 'alpaca') {
+      await refetchAlpacaBalance();
+    }
+  };
+  
+  const refetchPositions = async () => {
+    if (activeBroker?.brokerType === 'alpaca') {
+      await refetchAlpacaPositions();
+    }
+  };
   
   // Fetch all accounts for aggregated view
   const { data: accounts } = trpc.account.list.useQuery();
@@ -680,16 +743,34 @@ export default function Dashboard() {
               </CardContent>
             </Card>
             
-            {/* Live Market Prices */}
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle>Live Market Prices</CardTitle>
-                <CardDescription>Real-time streaming from Alpaca</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PriceTicker symbols={['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA']} />
-              </CardContent>
-            </Card>
+            {/* Market Status & Live Prices */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Market Status Card */}
+              <MarketStatusCard />
+              
+              {/* Live Market Prices */}
+              <Card className="bg-card border-border lg:col-span-2">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">Live Market Prices</CardTitle>
+                      <CardDescription>Real-time streaming from Alpaca</CardDescription>
+                    </div>
+                    <MarketStatusIndicator />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <PriceTicker symbols={['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA']} />
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Market News Feed */}
+            <MarketNewsFeed 
+              watchlistSymbols={['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'NVDA']}
+              compact={false}
+              maxItems={15}
+            />
           </>
         )}
       </div>
