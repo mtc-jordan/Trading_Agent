@@ -6633,6 +6633,29 @@ export const appRouter = router({
         return adapter.getNews(input.symbols, input.limit);
       }),
 
+    // AI-Powered News Sentiment Analysis
+    analyzeNewsSentiment: protectedProcedure
+      .input(z.object({
+        articles: z.array(z.object({
+          id: z.string(),
+          headline: z.string(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        const { analyzeNewsBatchSentiment } = await import('./services/newsSentimentAnalysis');
+        return analyzeNewsBatchSentiment(input.articles);
+      }),
+
+    // Quick keyword-based sentiment (no LLM, instant)
+    getQuickSentiment: publicProcedure
+      .input(z.object({
+        headline: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { analyzeKeywordSentiment } = await import('./services/newsSentimentAnalysis');
+        return analyzeKeywordSentiment(input.headline);
+      }),
+
     // Trading - Orders
     placeOrder: protectedProcedure
       .input(z.object({

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { trpc } from '@/lib/trpc';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,7 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
+  Minus,
   Search,
   RefreshCw,
   Filter,
@@ -23,6 +24,8 @@ import {
   Globe,
   Building2,
   Zap,
+  Brain,
+  Loader2,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -52,26 +55,18 @@ interface NewsArticle {
   updatedAt?: Date;
 }
 
+interface SentimentResult {
+  sentiment: 'bullish' | 'bearish' | 'neutral';
+  confidence: number;
+  reasoning: string;
+}
+
 interface MarketNewsFeedProps {
   watchlistSymbols?: string[];
   compact?: boolean;
   maxItems?: number;
   showHeader?: boolean;
   className?: string;
-}
-
-// Sentiment analysis based on headline keywords
-function analyzeSentiment(headline: string): 'bullish' | 'bearish' | 'neutral' {
-  const bullishKeywords = ['surge', 'soar', 'jump', 'rally', 'gain', 'rise', 'up', 'high', 'record', 'beat', 'exceed', 'growth', 'profit', 'positive', 'upgrade', 'buy', 'outperform', 'strong', 'boost'];
-  const bearishKeywords = ['fall', 'drop', 'plunge', 'crash', 'decline', 'down', 'low', 'miss', 'loss', 'negative', 'downgrade', 'sell', 'underperform', 'weak', 'cut', 'layoff', 'warning', 'concern', 'fear'];
-  
-  const lowerHeadline = headline.toLowerCase();
-  const bullishCount = bullishKeywords.filter(kw => lowerHeadline.includes(kw)).length;
-  const bearishCount = bearishKeywords.filter(kw => lowerHeadline.includes(kw)).length;
-  
-  if (bullishCount > bearishCount) return 'bullish';
-  if (bearishCount > bullishCount) return 'bearish';
-  return 'neutral';
 }
 
 // Format relative time
@@ -98,19 +93,102 @@ function getSourceIcon(source: string) {
   return <Newspaper className="h-3 w-3" />;
 }
 
-// News Card Component
-function NewsCard({ article, compact = false }: { article: NewsArticle; compact?: boolean }) {
-  const sentiment = analyzeSentiment(article.headline);
-  const [isBookmarked, setIsBookmarked] = useState(false);
-  
-  const sentimentConfig = {
-    bullish: { color: 'text-green-500', bg: 'bg-green-500/10', icon: TrendingUp, label: 'Bullish' },
-    bearish: { color: 'text-red-500', bg: 'bg-red-500/10', icon: TrendingDown, label: 'Bearish' },
-    neutral: { color: 'text-gray-400', bg: 'bg-gray-500/10', icon: null, label: 'Neutral' },
+// Sentiment Badge Component
+function SentimentBadge({ 
+  sentiment, 
+  isLoading = false,
+  showReasoning = false,
+  reasoning = '',
+}: { 
+  sentiment: SentimentResult | null; 
+  isLoading?: boolean;
+  showReasoning?: boolean;
+  reasoning?: string;
+}) {
+  if (isLoading) {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-muted/50">
+        <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" />
+        Analyzing...
+      </Badge>
+    );
+  }
+
+  if (!sentiment) return null;
+
+  const config = {
+    bullish: { 
+      color: 'text-green-500', 
+      bg: 'bg-green-500/10 border-green-500/30', 
+      icon: TrendingUp, 
+      label: 'Bullish',
+      hoverBg: 'hover:bg-green-500/20'
+    },
+    bearish: { 
+      color: 'text-red-500', 
+      bg: 'bg-red-500/10 border-red-500/30', 
+      icon: TrendingDown, 
+      label: 'Bearish',
+      hoverBg: 'hover:bg-red-500/20'
+    },
+    neutral: { 
+      color: 'text-gray-400', 
+      bg: 'bg-gray-500/10 border-gray-500/30', 
+      icon: Minus, 
+      label: 'Neutral',
+      hoverBg: 'hover:bg-gray-500/20'
+    },
   };
-  
-  const config = sentimentConfig[sentiment];
-  const SentimentIcon = config.icon;
+
+  const { color, bg, icon: Icon, label, hoverBg } = config[sentiment.sentiment];
+
+  const badge = (
+    <Badge 
+      variant="outline" 
+      className={`${color} ${bg} ${hoverBg} text-[10px] px-1.5 py-0 transition-colors cursor-default`}
+    >
+      <Icon className="h-2.5 w-2.5 mr-0.5" />
+      {label}
+      {sentiment.confidence > 0 && (
+        <span className="ml-1 opacity-70">{sentiment.confidence}%</span>
+      )}
+    </Badge>
+  );
+
+  if (showReasoning && reasoning) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {badge}
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[250px]">
+            <div className="flex items-start gap-2">
+              <Brain className="h-3.5 w-3.5 mt-0.5 text-primary flex-shrink-0" />
+              <p className="text-xs">{reasoning}</p>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return badge;
+}
+
+// News Card Component
+function NewsCard({ 
+  article, 
+  compact = false,
+  sentiment,
+  isAnalyzing = false,
+}: { 
+  article: NewsArticle; 
+  compact?: boolean;
+  sentiment?: SentimentResult | null;
+  isAnalyzing?: boolean;
+}) {
+  const [isBookmarked, setIsBookmarked] = useState(false);
   
   const thumbnail = article.images?.find(img => img.size === 'thumb' || img.size === 'small')?.url;
   
@@ -118,7 +196,7 @@ function NewsCard({ article, compact = false }: { article: NewsArticle; compact?
     return (
       <div className="group flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors cursor-pointer border-b border-border/50 last:border-0">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-xs text-muted-foreground flex items-center gap-1">
               {getSourceIcon(article.source)}
               {article.source}
@@ -128,12 +206,12 @@ function NewsCard({ article, compact = false }: { article: NewsArticle; compact?
               <Clock className="h-3 w-3" />
               {formatRelativeTime(article.createdAt)}
             </span>
-            {SentimentIcon && (
-              <Badge variant="outline" className={`${config.color} ${config.bg} text-[10px] px-1.5 py-0`}>
-                <SentimentIcon className="h-2.5 w-2.5 mr-0.5" />
-                {config.label}
-              </Badge>
-            )}
+            <SentimentBadge 
+              sentiment={sentiment || null} 
+              isLoading={isAnalyzing}
+              showReasoning={true}
+              reasoning={sentiment?.reasoning}
+            />
           </div>
           <a
             href={article.url}
@@ -176,7 +254,7 @@ function NewsCard({ article, compact = false }: { article: NewsArticle; compact?
         )}
         <div className="flex-1 p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 {getSourceIcon(article.source)}
                 {article.source}
@@ -248,12 +326,12 @@ function NewsCard({ article, compact = false }: { article: NewsArticle; compact?
                 <span className="text-[10px] text-muted-foreground">+{article.symbols.length - 4} more</span>
               )}
             </div>
-            {SentimentIcon && (
-              <Badge variant="outline" className={`${config.color} ${config.bg} text-[10px]`}>
-                <SentimentIcon className="h-3 w-3 mr-1" />
-                {config.label}
-              </Badge>
-            )}
+            <SentimentBadge 
+              sentiment={sentiment || null} 
+              isLoading={isAnalyzing}
+              showReasoning={true}
+              reasoning={sentiment?.reasoning}
+            />
           </div>
         </div>
       </div>
@@ -313,6 +391,9 @@ export function MarketNewsFeed({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'watchlist' | 'trending'>('all');
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
+  const [sentimentMap, setSentimentMap] = useState<Map<string, SentimentResult>>(new Map());
+  const [analyzingIds, setAnalyzingIds] = useState<Set<string>>(new Set());
+  const [aiEnabled, setAiEnabled] = useState(true);
   
   // Fetch news for all symbols
   const { data: allNews, isLoading: allNewsLoading, refetch: refetchAll } = trpc.alpaca.getNews.useQuery(
@@ -325,6 +406,60 @@ export function MarketNewsFeed({
     { symbols: watchlistSymbols, limit: maxItems },
     { enabled: watchlistSymbols.length > 0, refetchInterval: 60000 }
   );
+  
+  // AI Sentiment Analysis mutation
+  const analyzeSentimentMutation = trpc.alpaca.analyzeNewsSentiment.useMutation({
+    onSuccess: (results) => {
+      setSentimentMap(prev => {
+        const newMap = new Map(prev);
+        results.forEach(result => {
+          newMap.set(result.articleId, result.sentiment);
+        });
+        return newMap;
+      });
+      setAnalyzingIds(new Set());
+    },
+    onError: (error) => {
+      console.error('Sentiment analysis error:', error);
+      setAnalyzingIds(new Set());
+    },
+  });
+  
+  // Analyze sentiment for new articles
+  const analyzeArticles = useCallback((articles: NewsArticle[]) => {
+    if (!aiEnabled || articles.length === 0) return;
+    
+    // Filter articles that haven't been analyzed yet
+    const unanalyzed = articles.filter(a => !sentimentMap.has(a.id) && !analyzingIds.has(a.id));
+    
+    if (unanalyzed.length === 0) return;
+    
+    // Mark as analyzing
+    setAnalyzingIds(prev => {
+      const newSet = new Set(prev);
+      unanalyzed.forEach(a => newSet.add(a.id));
+      return newSet;
+    });
+    
+    // Analyze in batches of 10
+    const batch = unanalyzed.slice(0, 10);
+    analyzeSentimentMutation.mutate({
+      articles: batch.map(a => ({ id: a.id, headline: a.headline })),
+    });
+  }, [aiEnabled, sentimentMap, analyzingIds, analyzeSentimentMutation]);
+  
+  // Trigger analysis when news loads
+  useEffect(() => {
+    if (allNews && aiEnabled) {
+      analyzeArticles(allNews);
+    }
+  }, [allNews, aiEnabled, analyzeArticles]);
+  
+  useEffect(() => {
+    if (watchlistNews && aiEnabled) {
+      analyzeArticles(watchlistNews);
+    }
+  }, [watchlistNews, aiEnabled, analyzeArticles]);
   
   // Get unique sources for filtering
   const sources = useMemo(() => {
@@ -365,6 +500,21 @@ export function MarketNewsFeed({
     return news;
   }, [activeTab, allNews, watchlistNews, searchQuery, selectedSource]);
   
+  // Sentiment statistics
+  const sentimentStats = useMemo(() => {
+    let bullish = 0, bearish = 0, neutral = 0;
+    filteredNews.forEach(article => {
+      const sentiment = sentimentMap.get(article.id);
+      if (sentiment) {
+        if (sentiment.sentiment === 'bullish') bullish++;
+        else if (sentiment.sentiment === 'bearish') bearish++;
+        else neutral++;
+      }
+    });
+    const total = bullish + bearish + neutral;
+    return { bullish, bearish, neutral, total };
+  }, [filteredNews, sentimentMap]);
+  
   const isLoading = activeTab === 'watchlist' ? watchlistLoading : allNewsLoading;
   
   const handleRefresh = () => {
@@ -389,6 +539,26 @@ export function MarketNewsFeed({
               </Badge>
             </CardTitle>
             <div className="flex items-center gap-2">
+              {/* AI Sentiment Toggle */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant={aiEnabled ? "default" : "ghost"} 
+                      size="sm" 
+                      className={`h-8 gap-1.5 ${aiEnabled ? 'bg-primary/90 hover:bg-primary' : ''}`}
+                      onClick={() => setAiEnabled(!aiEnabled)}
+                    >
+                      <Brain className={`h-4 w-4 ${analyzeSentimentMutation.isPending ? 'animate-pulse' : ''}`} />
+                      <span className="text-xs hidden sm:inline">AI Sentiment</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {aiEnabled ? 'AI sentiment analysis enabled' : 'Enable AI sentiment analysis'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -423,6 +593,36 @@ export function MarketNewsFeed({
               </DropdownMenu>
             </div>
           </div>
+          
+          {/* Sentiment Summary Bar */}
+          {aiEnabled && sentimentStats.total > 0 && (
+            <div className="flex items-center gap-3 mt-3 p-2 rounded-lg bg-muted/50">
+              <Brain className="h-4 w-4 text-primary" />
+              <span className="text-xs text-muted-foreground">Sentiment:</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-green-500 flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" />
+                  {sentimentStats.bullish} Bullish
+                </span>
+                <span className="text-xs text-muted-foreground">•</span>
+                <span className="text-xs text-red-500 flex items-center gap-1">
+                  <TrendingDown className="h-3 w-3" />
+                  {sentimentStats.bearish} Bearish
+                </span>
+                <span className="text-xs text-muted-foreground">•</span>
+                <span className="text-xs text-gray-400 flex items-center gap-1">
+                  <Minus className="h-3 w-3" />
+                  {sentimentStats.neutral} Neutral
+                </span>
+              </div>
+              {analyzeSentimentMutation.isPending && (
+                <span className="text-xs text-muted-foreground flex items-center gap-1 ml-auto">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Analyzing...
+                </span>
+              )}
+            </div>
+          )}
           
           <div className="flex items-center gap-3 mt-3">
             <div className="relative flex-1">
@@ -479,7 +679,13 @@ export function MarketNewsFeed({
               ) : (
                 <div className={compact ? 'divide-y divide-border/50' : 'space-y-3'}>
                   {filteredNews.map(article => (
-                    <NewsCard key={article.id} article={article} compact={compact} />
+                    <NewsCard 
+                      key={article.id} 
+                      article={article} 
+                      compact={compact}
+                      sentiment={sentimentMap.get(article.id)}
+                      isAnalyzing={analyzingIds.has(article.id)}
+                    />
                   ))}
                 </div>
               )}
@@ -493,12 +699,20 @@ export function MarketNewsFeed({
               Showing {filteredNews.length} articles
               {selectedSource && ` from ${selectedSource}`}
             </p>
-            <Button variant="ghost" size="sm" className="text-xs" asChild>
-              <a href="https://alpaca.markets/docs/api-references/market-data-api/news-data/" target="_blank" rel="noopener noreferrer">
-                Powered by Alpaca
-                <ExternalLink className="h-3 w-3 ml-1" />
-              </a>
-            </Button>
+            <div className="flex items-center gap-2">
+              {aiEnabled && (
+                <Badge variant="outline" className="text-[10px]">
+                  <Brain className="h-3 w-3 mr-1" />
+                  AI-Powered
+                </Badge>
+              )}
+              <Button variant="ghost" size="sm" className="text-xs" asChild>
+                <a href="https://alpaca.markets/docs/api-references/market-data-api/news-data/" target="_blank" rel="noopener noreferrer">
+                  Powered by Alpaca
+                  <ExternalLink className="h-3 w-3 ml-1" />
+                </a>
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

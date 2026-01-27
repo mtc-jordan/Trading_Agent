@@ -1428,3 +1428,11 @@
 - [x] Show article thumbnails, headlines, sources, timestamps
 - [x] Display related stock symbols for each article
 - [ ] Add voice command support for news navigation (future)
+
+## Phase 36: AI-Powered News Sentiment Analysis
+- [x] Create sentiment analysis service using LLM
+- [x] Add tRPC endpoint for batch sentiment analysis
+- [x] Update MarketNewsFeed component with sentiment indicators (bullish/bearish/neutral)
+- [x] Add sentiment caching to avoid redundant LLM calls
+- [x] Display confidence score for sentiment predictions
+- [x] Write tests for sentiment analysis feature (18 tests passing)
