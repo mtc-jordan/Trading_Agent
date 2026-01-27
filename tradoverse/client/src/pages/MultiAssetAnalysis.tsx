@@ -15,6 +15,7 @@ import {
 import { LivePriceTicker, MiniPriceTicker } from '@/components/LivePriceTicker';
 import { useRealtimePrices } from '@/hooks/useRealtimePrices';
 import { CorrelationMatrix } from '@/components/CorrelationMatrix';
+import { PortfolioOptimizer } from '@/components/PortfolioOptimizer';
 
 type AssetType = 'stock' | 'crypto' | 'options' | 'forex' | 'commodity';
 type SignalStrength = 'strong_buy' | 'buy' | 'hold' | 'sell' | 'strong_sell';
@@ -223,6 +224,9 @@ export default function MultiAssetAnalysis() {
             console.log(`Correlation between ${asset1} and ${asset2}: ${correlation}`);
           }}
         />
+
+        {/* Portfolio Optimizer */}
+        <PortfolioOptimizer />
 
         <Tabs value={assetType} onValueChange={(v) => setAssetType(v as AssetType)}>
           <TabsList className="grid w-full grid-cols-5">

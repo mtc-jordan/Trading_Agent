@@ -7541,6 +7541,129 @@ export const appRouter = router({
         return { success: true, message: 'Correlation cache cleared' };
       }),
   }),
+
+  // Portfolio Optimizer Router
+  portfolioOptimizer: router({
+    // Get sample assets for optimization
+    getSampleAssets: publicProcedure
+      .query(async () => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.generateSampleAssets();
+      }),
+
+    // Optimize portfolio based on risk profile
+    optimize: protectedProcedure
+      .input(z.object({
+        assets: z.array(z.object({
+          symbol: z.string(),
+          name: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'forex', 'commodity', 'bond']),
+          expectedReturn: z.number(),
+          volatility: z.number(),
+          currentPrice: z.number(),
+        })),
+        riskProfile: z.enum(['conservative', 'moderate', 'balanced', 'growth', 'aggressive']),
+        iterations: z.number().optional().default(10000),
+      }))
+      .mutation(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.optimizePortfolio(input.assets, input.riskProfile, input.iterations);
+      }),
+
+    // Generate efficient frontier
+    getEfficientFrontier: protectedProcedure
+      .input(z.object({
+        assets: z.array(z.object({
+          symbol: z.string(),
+          name: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'forex', 'commodity', 'bond']),
+          expectedReturn: z.number(),
+          volatility: z.number(),
+          currentPrice: z.number(),
+        })),
+        points: z.number().optional().default(50),
+      }))
+      .mutation(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.generateEfficientFrontier(input.assets, input.points);
+      }),
+
+    // Run Monte Carlo simulation
+    runMonteCarloSimulation: protectedProcedure
+      .input(z.object({
+        expectedReturn: z.number(),
+        expectedVolatility: z.number(),
+        initialValue: z.number(),
+        yearsToProject: z.number().optional().default(5),
+        simulations: z.number().optional().default(10000),
+        targetReturn: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        const portfolio = {
+          allocations: [],
+          expectedReturn: input.expectedReturn,
+          expectedVolatility: input.expectedVolatility,
+          sharpeRatio: 0,
+          riskProfile: 'balanced' as const,
+          diversificationScore: 0,
+          efficientFrontierPosition: 'optimal' as const,
+        };
+        return optimizer.runMonteCarloSimulation(
+          portfolio,
+          input.initialValue,
+          input.yearsToProject,
+          input.simulations,
+          input.targetReturn
+        );
+      }),
+
+    // Calculate rebalancing recommendations
+    getRebalancingRecommendations: protectedProcedure
+      .input(z.object({
+        currentAllocations: z.array(z.object({
+          symbol: z.string(),
+          weight: z.number(),
+        })),
+        targetAllocations: z.array(z.object({
+          symbol: z.string(),
+          name: z.string(),
+          assetType: z.string(),
+          weight: z.number(),
+          expectedContribution: z.number(),
+        })),
+        threshold: z.number().optional().default(0.05),
+      }))
+      .mutation(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.calculateRebalancing(
+          input.currentAllocations,
+          input.targetAllocations,
+          input.threshold
+        );
+      }),
+
+    // Get risk profile description
+    getRiskProfileDescription: publicProcedure
+      .input(z.object({
+        profile: z.enum(['conservative', 'moderate', 'balanced', 'growth', 'aggressive']),
+      }))
+      .query(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.getRiskProfileDescription(input.profile);
+      }),
+
+    // Get all risk profiles
+    getAllRiskProfiles: publicProcedure
+      .query(async () => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        const profiles = ['conservative', 'moderate', 'balanced', 'growth', 'aggressive'] as const;
+        return profiles.map(p => ({
+          id: p,
+          ...optimizer.getRiskProfileDescription(p),
+        }));
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

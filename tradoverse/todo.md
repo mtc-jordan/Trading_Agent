@@ -1489,3 +1489,15 @@
 - [x] Add correlation strength indicators (strong positive/negative, weak, neutral)
 - [x] Add metadata summary (total pairs, avg correlation, strongest +/-)
 - [x] Write comprehensive tests for correlation service (31 tests passing)
+
+## Phase 43: Portfolio Optimizer Tool
+- [x] Create portfolio optimization service with Modern Portfolio Theory (MPT) algorithms
+- [x] Implement efficient frontier calculation for risk-return tradeoffs
+- [x] Add mean-variance optimization with Sharpe ratio maximization
+- [x] Integrate correlation matrix data for covariance calculations
+- [x] Add risk tolerance slider (conservative to aggressive profiles)
+- [x] Build PortfolioOptimizer UI component with pie chart allocation display
+- [x] Add expected return and volatility projections
+- [x] Implement Monte Carlo simulation for portfolio scenarios
+- [x] Create rebalancing recommendations based on current vs optimal allocation
+- [x] Write comprehensive tests for optimization algorithms (35 tests passing)
