@@ -7206,6 +7206,232 @@ export const appRouter = router({
         return result;
       }),
   }),
+
+  // ==================== MULTI-ASSET ANALYSIS ====================
+  multiAsset: router({
+    // Analyze any asset type (stock, crypto, options, forex, commodity)
+    analyze: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        assetType: z.enum(['stock', 'crypto', 'options', 'forex', 'commodity']),
+        currentPrice: z.number(),
+        priceChange24h: z.number(),
+        priceChange7d: z.number().optional(),
+        volume24h: z.number(),
+        marketCap: z.number().optional(),
+        stockData: z.object({
+          sector: z.string(),
+          industry: z.string(),
+          peRatio: z.number().optional(),
+          earningsGrowth: z.number().optional(),
+          dividendYield: z.number().optional(),
+        }).optional(),
+        cryptoData: z.object({
+          symbol: z.string(),
+          category: z.enum(['layer1', 'layer2', 'defi', 'nft', 'gaming', 'meme', 'stablecoin', 'unknown']),
+          currentPrice: z.number(),
+          priceChange24h: z.number(),
+          priceChange7d: z.number(),
+          volume24h: z.number(),
+          marketCap: z.number(),
+        }).optional(),
+        optionsData: z.object({
+          symbol: z.string(),
+          underlyingPrice: z.number(),
+          greeks: z.object({
+            delta: z.number(),
+            gamma: z.number(),
+            theta: z.number(),
+            vega: z.number(),
+            rho: z.number(),
+            impliedVolatility: z.number(),
+            historicalVolatility: z.number(),
+            ivRank: z.number(),
+            ivPercentile: z.number(),
+            openInterest: z.number(),
+            volume: z.number(),
+            bid: z.number(),
+            ask: z.number(),
+            lastPrice: z.number(),
+            bidAskSpread: z.number(),
+            strikePrice: z.number(),
+            underlyingPrice: z.number(),
+            daysToExpiry: z.number(),
+            optionType: z.enum(['call', 'put']),
+          }),
+        }).optional(),
+        forexData: z.object({
+          baseCurrency: z.string(),
+          quoteCurrency: z.string(),
+          interestRateDiff: z.number(),
+          centralBankBias: z.enum(['hawkish', 'neutral', 'dovish']),
+          cotPositioning: z.number(),
+        }).optional(),
+        commodityData: z.object({
+          commodityType: z.enum(['energy', 'metals', 'agriculture', 'livestock']),
+          inventoryLevels: z.number(),
+          seasonalPattern: z.number(),
+          supplyDisruption: z.boolean(),
+        }).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { UnifiedMultiAssetOrchestrator } = await import('./services/ai-agents/UnifiedMultiAssetOrchestrator');
+        const orchestrator = new UnifiedMultiAssetOrchestrator();
+        return orchestrator.analyze(input);
+      }),
+
+    // Analyze portfolio across multiple asset types
+    analyzePortfolio: protectedProcedure
+      .input(z.object({
+        assets: z.array(z.object({
+          symbol: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'options', 'forex', 'commodity']),
+          currentPrice: z.number(),
+          priceChange24h: z.number(),
+          priceChange7d: z.number().optional(),
+          volume24h: z.number(),
+          marketCap: z.number().optional(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        const { UnifiedMultiAssetOrchestrator } = await import('./services/ai-agents/UnifiedMultiAssetOrchestrator');
+        const orchestrator = new UnifiedMultiAssetOrchestrator();
+        return orchestrator.analyzePortfolio(input.assets);
+      }),
+
+    // Detect asset type from symbol
+    detectAssetType: publicProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ input }) => {
+        const { detectAssetType } = await import('./services/ai-agents/UnifiedMultiAssetOrchestrator');
+        return { assetType: detectAssetType(input.symbol) };
+      }),
+  }),
+
+  // Real-time price feed router
+  realtimePrices: router({
+    // Get current price for a single symbol
+    getPrice: publicProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { realtimePriceFeed, detectAssetTypeFromSymbol, generateSimulatedPrice } = await import('./services/realtimePriceFeed');
+        const price = realtimePriceFeed.getPrice(input.symbol);
+        if (price) return price;
+        
+        // Generate fresh price if not cached
+        const assetType = detectAssetTypeFromSymbol(input.symbol);
+        const { generateSimulatedPrice: genPrice } = await import('./services/realtimePriceFeed');
+        return genPrice(input.symbol, assetType);
+      }),
+
+    // Get prices for multiple symbols
+    getPrices: publicProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .query(async ({ input }) => {
+        const { getAggregatedPrices, detectAssetTypeFromSymbol } = await import('./services/realtimePriceFeed');
+        
+        // Group symbols by asset type
+        const grouped: { stocks: string[]; crypto: string[]; forex: string[]; commodities: string[] } = {
+          stocks: [],
+          crypto: [],
+          forex: [],
+          commodities: [],
+        };
+        
+        input.symbols.forEach(symbol => {
+          const assetType = detectAssetTypeFromSymbol(symbol);
+          switch (assetType) {
+            case 'stock': grouped.stocks.push(symbol); break;
+            case 'crypto': grouped.crypto.push(symbol); break;
+            case 'forex': grouped.forex.push(symbol); break;
+            case 'commodity': grouped.commodities.push(symbol); break;
+          }
+        });
+        
+        const aggregated = getAggregatedPrices(grouped);
+        
+        // Flatten to a single array
+        return {
+          prices: [
+            ...aggregated.stocks,
+            ...aggregated.crypto,
+            ...aggregated.forex,
+            ...aggregated.commodities,
+          ],
+          timestamp: aggregated.timestamp,
+        };
+      }),
+
+    // Get aggregated prices by asset type
+    getAggregatedPrices: publicProcedure
+      .input(z.object({
+        stocks: z.array(z.string()).optional(),
+        crypto: z.array(z.string()).optional(),
+        forex: z.array(z.string()).optional(),
+        commodities: z.array(z.string()).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { getAggregatedPrices } = await import('./services/realtimePriceFeed');
+        return getAggregatedPrices(input);
+      }),
+
+    // Get default watchlist
+    getDefaultWatchlist: publicProcedure
+      .query(async () => {
+        const { DEFAULT_WATCHLIST } = await import('./services/realtimePriceFeed');
+        return DEFAULT_WATCHLIST;
+      }),
+
+    // Subscribe to price updates (initializes the feed)
+    subscribe: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .mutation(async ({ input }) => {
+        const { realtimePriceFeed, detectAssetTypeFromSymbol } = await import('./services/realtimePriceFeed');
+        
+        input.symbols.forEach(symbol => {
+          const assetType = detectAssetTypeFromSymbol(symbol);
+          realtimePriceFeed.subscribe({ symbol, assetType });
+        });
+        
+        return { subscribed: input.symbols, status: 'active' };
+      }),
+
+    // Unsubscribe from price updates
+    unsubscribe: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .mutation(async ({ input }) => {
+        const { realtimePriceFeed } = await import('./services/realtimePriceFeed');
+        
+        input.symbols.forEach(symbol => {
+          realtimePriceFeed.unsubscribe(symbol);
+        });
+        
+        return { unsubscribed: input.symbols };
+      }),
+
+    // Get feed service status
+    getStatus: publicProcedure
+      .query(async () => {
+        const { realtimePriceFeed } = await import('./services/realtimePriceFeed');
+        return realtimePriceFeed.getStatus();
+      }),
+
+    // Force refresh price for a symbol
+    refreshPrice: publicProcedure
+      .input(z.object({ symbol: z.string() }))
+      .mutation(async ({ input }) => {
+        const { realtimePriceFeed } = await import('./services/realtimePriceFeed');
+        return realtimePriceFeed.refreshPrice(input.symbol);
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

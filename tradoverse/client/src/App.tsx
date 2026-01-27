@@ -63,6 +63,7 @@ import UnifiedTrading from "./pages/UnifiedTrading";
 import WatchlistAlerts from "./pages/WatchlistAlerts";
 import MultiAssetTrading from "./pages/MultiAssetTrading";
 import BrokerComparison from "./pages/BrokerComparison";
+import MultiAssetAnalysis from "./pages/MultiAssetAnalysis";
 
 function Router() {
   return (
@@ -72,6 +73,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/analysis" component={Analysis} />
       <Route path="/enhanced-analysis" component={EnhancedAnalysis} />
+      <Route path="/multi-asset-analysis" component={MultiAssetAnalysis} />
       <Route path="/bots" component={Bots} />
       <Route path="/backtest" component={Backtest} />
       <Route path="/portfolio" component={Portfolio} />

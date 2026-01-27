@@ -122,6 +122,7 @@ const navigationGroups: NavGroup[] = [
     defaultOpen: true,
     items: [
       { id: "analysis", icon: Brain, iconName: "Brain", label: "AI Analysis", path: "/analysis" },
+      { id: "multi-asset-analysis", icon: Layers, iconName: "Layers", label: "Multi-Asset Analysis", path: "/multi-asset-analysis", badge: "New" },
       { id: "analysis-history", icon: History, iconName: "History", label: "Analysis History", path: "/analysis-history" },
       { id: "accuracy", icon: Target, iconName: "Target", label: "Accuracy", path: "/accuracy" },
       { id: "social-sentiment", icon: MessageSquare, iconName: "MessageSquare", label: "Social Sentiment", path: "/social-sentiment" },
