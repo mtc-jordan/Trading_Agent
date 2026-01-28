@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,12 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { trpc } from '@/lib/trpc';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  BarChart, Bar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
 } from 'recharts';
 import { 
   GitCompare, TrendingUp, TrendingDown, Award, AlertTriangle,
-  RefreshCw, Trash2, ChevronRight, BarChart3, Activity, Target
+  RefreshCw, Trash2, BarChart3, Target
 } from 'lucide-react';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
@@ -27,8 +27,8 @@ export default function BacktestComparison() {
   
   // Compare selected runs
   const { data: comparison, isLoading: comparisonLoading } = 
-    trpc.broker.compareBacktests.useQuery(
-      { runIds: selectedRuns },
+    trpc.broker.compareBacktestResults.useQuery(
+      { backtestIds: selectedRuns },
       { enabled: selectedRuns.length >= 2 }
     );
   
@@ -53,6 +53,23 @@ export default function BacktestComparison() {
   const formatPercent = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
   const formatNumber = (value: number) => value.toFixed(2);
 
+  // Prepare radar chart data
+  const radarData = comparison?.comparison ? [
+    { metric: 'Return', ...Object.fromEntries(comparison.comparison.map(r => [r.strategyName, Math.min(r.totalReturn / 50 * 100, 100)])) },
+    { metric: 'Sharpe', ...Object.fromEntries(comparison.comparison.map(r => [r.strategyName, Math.min(r.sharpeRatio / 3 * 100, 100)])) },
+    { metric: 'Win Rate', ...Object.fromEntries(comparison.comparison.map(r => [r.strategyName, r.winRate])) },
+    { metric: 'Profit Factor', ...Object.fromEntries(comparison.comparison.map(r => [r.strategyName, Math.min(r.profitFactor / 3 * 100, 100)])) },
+    { metric: 'Low Drawdown', ...Object.fromEntries(comparison.comparison.map(r => [r.strategyName, 100 - r.maxDrawdown])) },
+  ] : [];
+
+  // Prepare bar chart data
+  const barData = comparison?.comparison?.map(r => ({
+    name: r.strategyName.substring(0, 15),
+    'Total Return': r.totalReturn,
+    'Sharpe Ratio': r.sharpeRatio * 10,
+    'Win Rate': r.winRate,
+  })) || [];
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -60,23 +77,32 @@ export default function BacktestComparison() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
-              <GitCompare className="w-8 h-8" />
+              <GitCompare className="w-8 h-8 text-primary" />
               Backtest Comparison
             </h1>
             <p className="text-muted-foreground mt-1">
-              Compare multiple backtest runs to find the best strategy configuration
+              Compare multiple backtest results side by side
             </p>
           </div>
-          <Button variant="outline" onClick={() => refetchRuns()}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => refetchRuns()}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => setSelectedRuns([])}
+              disabled={selectedRuns.length === 0}
+            >
+              Clear Selection
+            </Button>
+          </div>
         </div>
 
         {/* Run Selection */}
         <Card>
           <CardHeader>
-            <CardTitle>Select Backtests to Compare</CardTitle>
+            <CardTitle>Select Runs to Compare</CardTitle>
             <CardDescription>
               Choose 2 or more backtest runs to compare their performance
             </CardDescription>
@@ -87,12 +113,14 @@ export default function BacktestComparison() {
                 <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
               </div>
             ) : runs && runs.length > 0 ? (
-              <div className="space-y-3">
+              <div className="grid gap-3">
                 {runs.map((run: any) => (
                   <div 
                     key={run.id}
                     className={`flex items-center justify-between p-4 rounded-lg border transition-colors ${
-                      selectedRuns.includes(run.id) ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                      selectedRuns.includes(run.id) 
+                        ? 'border-primary bg-primary/5' 
+                        : 'border-border hover:border-primary/50'
                     }`}
                   >
                     <div className="flex items-center gap-4">
@@ -102,24 +130,24 @@ export default function BacktestComparison() {
                       />
                       {selectedRuns.includes(run.id) && (
                         <div 
-                          className="w-3 h-3 rounded-full"
+                          className="w-4 h-4 rounded-full"
                           style={{ backgroundColor: getRunColor(run.id) }}
                         />
                       )}
                       <div>
-                        <h3 className="font-medium">{run.name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {run.symbol} • {run.startDate} to {run.endDate}
-                        </p>
+                        <div className="font-medium">{run.strategyName || run.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {run.symbol} • {new Date(run.startDate || run.createdAt).toLocaleDateString()}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <div className={`font-medium ${run.results.totalReturn >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {formatPercent(run.results.totalReturn)}
+                        <div className={`font-medium ${(run.totalReturn || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {formatPercent(run.totalReturn || 0)}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          Sharpe: {formatNumber(run.results.sharpeRatio)}
+                          Sharpe: {formatNumber(run.sharpeRatio || 0)}
                         </div>
                       </div>
                       <Button 
@@ -135,341 +163,218 @@ export default function BacktestComparison() {
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                No backtest runs available. Run a backtest from the Strategy Backtester page.
-              </div>
-            )}
-            
-            {selectedRuns.length > 0 && selectedRuns.length < 2 && (
-              <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                <span className="text-sm">Select at least 2 backtests to compare</span>
+                <AlertTriangle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No backtest runs found</p>
+                <p className="text-sm mt-1">Run some backtests first to compare them</p>
               </div>
             )}
           </CardContent>
         </Card>
 
         {/* Comparison Results */}
-        {comparison && (
+        {selectedRuns.length >= 2 && (
           <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {comparisonLoading ? (
               <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                    <Award className="w-4 h-4" />
-                    <span className="text-sm">Best Overall</span>
-                  </div>
-                  <div className="font-semibold">
-                    {comparison.runs.find((r: any) => r.id === comparison.summary.bestOverall)?.name}
-                  </div>
+                <CardContent className="flex items-center justify-center py-12">
+                  <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                    <Target className="w-4 h-4" />
-                    <span className="text-sm">Best Risk-Adjusted</span>
-                  </div>
-                  <div className="font-semibold">
-                    {comparison.runs.find((r: any) => r.id === comparison.summary.bestRiskAdjusted)?.name}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                    <TrendingDown className="w-4 h-4" />
-                    <span className="text-sm">Lowest Drawdown</span>
-                  </div>
-                  <div className="font-semibold">
-                    {comparison.runs.find((r: any) => r.id === comparison.summary.lowestDrawdown)?.name}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                    <TrendingUp className="w-4 h-4" />
-                    <span className="text-sm">Highest Win Rate</span>
-                  </div>
-                  <div className="font-semibold">
-                    {comparison.runs.find((r: any) => r.id === comparison.summary.highestWinRate)?.name}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            ) : comparison ? (
+              <>
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card className="border-green-500/50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-2 text-green-500 mb-2">
+                        <Award className="w-5 h-5" />
+                        <span className="text-sm">Best Overall</span>
+                      </div>
+                      <div className="font-semibold">
+                        {comparison.comparison.find(r => r.id === comparison.bestOverall)?.strategyName || 'N/A'}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-blue-500/50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-2 text-blue-500 mb-2">
+                        <Target className="w-5 h-5" />
+                        <span className="text-sm">Best Risk-Adjusted</span>
+                      </div>
+                      <div className="font-semibold">
+                        {comparison.comparison.find(r => r.id === comparison.bestRiskAdjusted)?.strategyName || 'N/A'}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-yellow-500/50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-2 text-yellow-500 mb-2">
+                        <TrendingUp className="w-5 h-5" />
+                        <span className="text-sm">Highest Win Rate</span>
+                      </div>
+                      <div className="font-semibold">
+                        {comparison.comparison.find(r => r.id === comparison.bestWinRate)?.strategyName || 'N/A'}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
-            {/* Recommendations */}
-            {comparison.summary.recommendations.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ChevronRight className="w-5 h-5" />
-                    Recommendations
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {comparison.summary.recommendations.map((rec: string, idx: number) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2" />
-                        <span>{rec}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
+                {/* Detailed Comparison */}
+                <Tabs defaultValue="table" className="space-y-4">
+                  <TabsList>
+                    <TabsTrigger value="table">
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      Table View
+                    </TabsTrigger>
+                    <TabsTrigger value="radar">
+                      <Target className="w-4 h-4 mr-2" />
+                      Radar Chart
+                    </TabsTrigger>
+                    <TabsTrigger value="bar">
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      Bar Chart
+                    </TabsTrigger>
+                  </TabsList>
 
-            {/* Detailed Comparison */}
-            <Tabs defaultValue="metrics" className="space-y-4">
-              <TabsList>
-                <TabsTrigger value="metrics">
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Metrics
-                </TabsTrigger>
-                <TabsTrigger value="equity">
-                  <Activity className="w-4 h-4 mr-2" />
-                  Equity Curves
-                </TabsTrigger>
-                <TabsTrigger value="drawdown">
-                  <TrendingDown className="w-4 h-4 mr-2" />
-                  Drawdowns
-                </TabsTrigger>
-                <TabsTrigger value="monthly">
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Monthly Returns
-                </TabsTrigger>
-              </TabsList>
-
-              {/* Metrics Comparison */}
-              <TabsContent value="metrics">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Performance Metrics Comparison</CardTitle>
-                    <CardDescription>
-                      Side-by-side comparison of key performance indicators
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Metric</TableHead>
-                          {comparison.runs.map((run: any) => (
-                            <TableHead key={run.id} className="text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <div 
-                                  className="w-3 h-3 rounded-full"
-                                  style={{ backgroundColor: getRunColor(run.id) }}
-                                />
-                                {run.name}
-                              </div>
-                            </TableHead>
-                          ))}
-                          <TableHead className="text-center">Winner</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {comparison.metrics.map((metric: any) => (
-                          <TableRow key={metric.metric}>
-                            <TableCell>
-                              <div>
-                                <div className="font-medium">{metric.metric}</div>
-                                <div className="text-xs text-muted-foreground">{metric.description}</div>
-                              </div>
-                            </TableCell>
-                            {metric.values.map((value: any) => {
-                              const isWinner = value.runId === metric.winner;
-                              return (
-                                <TableCell key={value.runId} className="text-center">
-                                  <span className={isWinner ? 'font-bold text-primary' : ''}>
-                                    {metric.metric.includes('Return') || metric.metric.includes('Rate') || metric.metric.includes('Drawdown')
-                                      ? formatPercent(value.value)
-                                      : formatNumber(value.value)}
-                                  </span>
-                                  {isWinner && <Badge className="ml-2" variant="secondary">#{value.rank}</Badge>}
+                  {/* Table Comparison */}
+                  <TabsContent value="table">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Performance Metrics Comparison</CardTitle>
+                        <CardDescription>
+                          Side-by-side comparison of key performance indicators
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Strategy</TableHead>
+                              <TableHead className="text-right">Total Return</TableHead>
+                              <TableHead className="text-right">Sharpe Ratio</TableHead>
+                              <TableHead className="text-right">Max Drawdown</TableHead>
+                              <TableHead className="text-right">Win Rate</TableHead>
+                              <TableHead className="text-right">Profit Factor</TableHead>
+                              <TableHead className="text-right">Score</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {comparison.comparison.map((run, idx) => (
+                              <TableRow key={run.id}>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <div 
+                                      className="w-3 h-3 rounded-full"
+                                      style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                                    />
+                                    {run.strategyName}
+                                    {run.id === comparison.bestOverall && (
+                                      <Badge variant="default" className="ml-2">Best</Badge>
+                                    )}
+                                  </div>
                                 </TableCell>
-                              );
-                            })}
-                            <TableCell className="text-center">
-                              <Badge variant="outline">
-                                {comparison.runs.find((r: any) => r.id === metric.winner)?.name.split(' ')[0]}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                                <TableCell className={`text-right ${run.totalReturn >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                  {formatPercent(run.totalReturn)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {formatNumber(run.sharpeRatio)}
+                                </TableCell>
+                                <TableCell className="text-right text-red-500">
+                                  -{formatNumber(run.maxDrawdown)}%
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {formatNumber(run.winRate)}%
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {formatNumber(run.profitFactor)}
+                                </TableCell>
+                                <TableCell className="text-right font-medium">
+                                  {formatNumber(run.score)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
 
-              {/* Equity Curves */}
-              <TabsContent value="equity">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Equity Curve Comparison</CardTitle>
-                    <CardDescription>
-                      Portfolio value over time for each strategy
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <LineChart data={comparison.equityCurveComparison}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis dataKey="date" className="text-xs" />
-                        <YAxis 
-                          tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-                          className="text-xs"
-                        />
-                        <Tooltip 
-                          formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                          labelFormatter={(label) => `Date: ${label}`}
-                        />
-                        <Legend />
-                        {comparison.runs.map((run: any, idx: number) => (
-                          <Line
-                            key={run.id}
-                            type="monotone"
-                            dataKey={run.name}
-                            stroke={COLORS[idx % COLORS.length]}
-                            strokeWidth={2}
-                            dot={false}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                  {/* Radar Chart */}
+                  <TabsContent value="radar">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Performance Radar</CardTitle>
+                        <CardDescription>
+                          Visual comparison across multiple dimensions
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[400px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart data={radarData}>
+                              <PolarGrid />
+                              <PolarAngleAxis dataKey="metric" />
+                              <PolarRadiusAxis angle={30} domain={[0, 100]} />
+                              {comparison.comparison.map((run, idx) => (
+                                <Radar
+                                  key={run.id}
+                                  name={run.strategyName}
+                                  dataKey={run.strategyName}
+                                  stroke={COLORS[idx % COLORS.length]}
+                                  fill={COLORS[idx % COLORS.length]}
+                                  fillOpacity={0.2}
+                                />
+                              ))}
+                              <Legend />
+                              <Tooltip />
+                            </RadarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
 
-              {/* Drawdowns */}
-              <TabsContent value="drawdown">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Drawdown Comparison</CardTitle>
-                    <CardDescription>
-                      Peak-to-trough decline over time
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <LineChart data={comparison.drawdownComparison}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis dataKey="date" className="text-xs" />
-                        <YAxis 
-                          tickFormatter={(value) => `${value.toFixed(0)}%`}
-                          className="text-xs"
-                        />
-                        <Tooltip 
-                          formatter={(value: number) => [`${value.toFixed(2)}%`, '']}
-                          labelFormatter={(label) => `Date: ${label}`}
-                        />
-                        <Legend />
-                        {comparison.runs.map((run: any, idx: number) => (
-                          <Line
-                            key={run.id}
-                            type="monotone"
-                            dataKey={run.name}
-                            stroke={COLORS[idx % COLORS.length]}
-                            strokeWidth={2}
-                            dot={false}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Monthly Returns */}
-              <TabsContent value="monthly">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Monthly Returns Comparison</CardTitle>
-                    <CardDescription>
-                      Month-by-month performance breakdown
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <BarChart data={comparison.monthlyComparison}>
-                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                        <XAxis dataKey="month" className="text-xs" />
-                        <YAxis 
-                          tickFormatter={(value) => `${value.toFixed(0)}%`}
-                          className="text-xs"
-                        />
-                        <Tooltip 
-                          formatter={(value: number) => [`${value.toFixed(2)}%`, '']}
-                          labelFormatter={(label) => `Month: ${label}`}
-                        />
-                        <Legend />
-                        {comparison.runs.map((run: any, idx: number) => (
-                          <Bar
-                            key={run.id}
-                            dataKey={run.name}
-                            fill={COLORS[idx % COLORS.length]}
-                            radius={[4, 4, 0, 0]}
-                          />
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-
-            {/* Correlation Matrix */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Strategy Correlation Matrix</CardTitle>
-                <CardDescription>
-                  How correlated are the equity curves of different strategies
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead></TableHead>
-                      {comparison.runs.map((run: any) => (
-                        <TableHead key={run.id} className="text-center">{run.name}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {comparison.correlationMatrix.map((row: number[], i: number) => (
-                      <TableRow key={i}>
-                        <TableCell className="font-medium">{comparison.runs[i].name}</TableCell>
-                        {row.map((corr: number, j: number) => (
-                          <TableCell 
-                            key={j} 
-                            className="text-center"
-                            style={{
-                              backgroundColor: i === j 
-                                ? 'transparent' 
-                                : `rgba(59, 130, 246, ${Math.abs(corr) * 0.3})`,
-                            }}
-                          >
-                            {corr.toFixed(2)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                  {/* Bar Chart */}
+                  <TabsContent value="bar">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Performance Bars</CardTitle>
+                        <CardDescription>
+                          Comparison of key metrics across strategies
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[400px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={barData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="name" />
+                              <YAxis />
+                              <Tooltip />
+                              <Legend />
+                              <Bar dataKey="Total Return" fill="#3b82f6" />
+                              <Bar dataKey="Sharpe Ratio" fill="#10b981" />
+                              <Bar dataKey="Win Rate" fill="#f59e0b" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
+              </>
+            ) : null}
           </>
         )}
 
-        {/* Loading State */}
-        {comparisonLoading && selectedRuns.length >= 2 && (
-          <div className="flex items-center justify-center py-12">
-            <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
+        {/* Selection Hint */}
+        {selectedRuns.length === 1 && (
+          <Card className="border-dashed">
+            <CardContent className="flex items-center justify-center py-8 text-muted-foreground">
+              <AlertTriangle className="w-5 h-5 mr-2" />
+              Select at least one more run to compare
+            </CardContent>
+          </Card>
         )}
       </div>
     </DashboardLayout>

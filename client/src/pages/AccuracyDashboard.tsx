@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +52,7 @@ export default function AccuracyDashboard() {
 
   if (isLoading) {
     return (
-      <div className="container py-8">
+      <DashboardLayout>
         <div className="animate-pulse space-y-6">
           <div className="h-8 w-64 bg-muted rounded" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -60,12 +61,13 @@ export default function AccuracyDashboard() {
             ))}
           </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="container py-8 space-y-8">
+    <DashboardLayout>
+      <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight">Prediction Accuracy</h1>
@@ -280,6 +282,7 @@ export default function AccuracyDashboard() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

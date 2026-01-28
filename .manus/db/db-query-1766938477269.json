@@ -1,9 +1,0 @@
-{
-  "query": "CREATE TABLE IF NOT EXISTS shared_scenarios (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  userId INT NOT NULL,\n  name VARCHAR(255) NOT NULL,\n  description TEXT,\n  scenarioData JSON NOT NULL,\n  trades JSON NOT NULL,\n  positions JSON,\n  cash DECIMAL(18, 2) DEFAULT 0,\n  category VARCHAR(50) DEFAULT 'general',\n  tags JSON,\n  isPublic BOOLEAN DEFAULT TRUE,\n  likesCount INT DEFAULT 0,\n  importsCount INT DEFAULT 0,\n  viewsCount INT DEFAULT 0,\n  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  INDEX idx_user (userId),\n  INDEX idx_public (isPublic),\n  INDEX idx_category (category),\n  INDEX idx_likes (likesCount),\n  INDEX idx_imports (importsCount)\n);",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2JvR2JmsVzzzo8g.542b2be615eb --database cYbBY4G8kX53fA5ZWwbsKK --execute CREATE TABLE IF NOT EXISTS shared_scenarios (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  userId INT NOT NULL,\n  name VARCHAR(255) NOT NULL,\n  description TEXT,\n  scenarioData JSON NOT NULL,\n  trades JSON NOT NULL,\n  positions JSON,\n  cash DECIMAL(18, 2) DEFAULT 0,\n  category VARCHAR(50) DEFAULT 'general',\n  tags JSON,\n  isPublic BOOLEAN DEFAULT TRUE,\n  likesCount INT DEFAULT 0,\n  importsCount INT DEFAULT 0,\n  viewsCount INT DEFAULT 0,\n  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  INDEX idx_user (userId),\n  INDEX idx_public (isPublic),\n  INDEX idx_category (category),\n  INDEX idx_likes (likesCount),\n  INDEX idx_imports (importsCount)\n);",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 1701
-}

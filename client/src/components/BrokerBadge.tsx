@@ -24,14 +24,16 @@ const BrokerIcon = ({ type, size = 'md' }: { type: BrokerType; size?: 'sm' | 'md
     alpaca: 'bg-yellow-500',
     interactive_brokers: 'bg-red-600',
     binance: 'bg-yellow-400',
-    coinbase: 'bg-blue-600'
+    coinbase: 'bg-blue-600',
+    schwab: 'bg-sky-500'
   };
   
   const initials: Record<BrokerType, string> = {
     alpaca: 'A',
     interactive_brokers: 'IB',
     binance: 'B',
-    coinbase: 'C'
+    coinbase: 'C',
+    schwab: 'CS'
   };
   
   const sizeClasses = {
@@ -65,11 +67,13 @@ export function BrokerBadge({
       <Badge 
         variant="outline" 
         className={cn(
-          'gap-1.5 text-muted-foreground border-dashed',
+          'gap-1.5 text-muted-foreground border-dashed cursor-pointer hover:bg-muted/50 transition-colors',
           className
         )}
+        onClick={() => window.location.href = '/brokers'}
+        title="Click to connect a broker"
       >
-        <WifiOff className="w-3 h-3" />
+        <div className="w-2 h-2 rounded-full bg-gray-500" />
         <span>No Broker</span>
       </Badge>
     );
@@ -88,12 +92,24 @@ export function BrokerBadge({
   };
   
   return (
-    <div className={cn(
-      'inline-flex items-center gap-2 rounded-md',
-      variantClasses[variant],
-      sizeClasses[size],
-      className
-    )}>
+    <div 
+      className={cn(
+        'inline-flex items-center gap-2 rounded-md cursor-pointer hover:bg-muted/50 transition-colors',
+        variantClasses[variant],
+        sizeClasses[size],
+        className
+      )}
+      onClick={() => window.location.href = '/brokers'}
+      title="Click to manage broker connections"
+    >
+      {/* Green/Yellow status dot */}
+      <div className={cn(
+        'w-2 h-2 rounded-full',
+        activeBroker.isConnected 
+          ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]' 
+          : 'bg-yellow-500 shadow-[0_0_6px_rgba(234,179,8,0.6)]'
+      )} />
+      
       <BrokerIcon type={activeBroker.brokerType} size={size} />
       
       <span className="font-medium">
@@ -112,14 +128,6 @@ export function BrokerBadge({
         >
           {isPaperMode ? 'PAPER' : 'LIVE'}
         </Badge>
-      )}
-      
-      {showStatus && (
-        activeBroker.isConnected ? (
-          <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-        ) : (
-          <AlertCircle className="w-3.5 h-3.5 text-yellow-500" />
-        )
       )}
     </div>
   );

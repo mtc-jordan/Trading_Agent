@@ -23,6 +23,8 @@ import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Tooltip } from
 import { useBroker } from '@/contexts/BrokerContext';
 import { BrokerBadge } from '@/components/BrokerBadge';
 import { UnifiedPositionsView } from '@/components/UnifiedPositionsView';
+import { AggregatedPortfolioView } from '@/components/AggregatedPortfolio';
+import { PortfolioComparison } from '@/components/PortfolioComparison';
 import { Building2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -170,6 +172,8 @@ export default function Portfolio() {
           <TabsList>
             <TabsTrigger value="accounts">Trading Accounts</TabsTrigger>
             <TabsTrigger value="positions">Broker Positions</TabsTrigger>
+            <TabsTrigger value="multi-broker">Multi-Broker</TabsTrigger>
+            <TabsTrigger value="comparison">Comparison</TabsTrigger>
           </TabsList>
           
           <TabsContent value="accounts">
@@ -392,6 +396,20 @@ export default function Portfolio() {
           
           <TabsContent value="positions">
             <UnifiedPositionsView />
+          </TabsContent>
+          
+          <TabsContent value="multi-broker">
+            <AggregatedPortfolioView showBrokerBreakdown={true} />
+          </TabsContent>
+
+          <TabsContent value="comparison">
+            <PortfolioComparison 
+              brokerPerformances={[
+                // Mock data - in production this would come from a tRPC query
+                // that aggregates performance data from all connected brokers
+              ]} 
+              isLoading={false}
+            />
           </TabsContent>
         </Tabs>
       </div>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -97,7 +98,7 @@ export default function Profile() {
 
   if (!user) {
     return (
-      <div className="container py-8">
+      <DashboardLayout>
         <Card>
           <CardContent className="py-12 text-center">
             <User className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
@@ -110,13 +111,13 @@ export default function Profile() {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </DashboardLayout>
     );
   }
 
   if (isLoading) {
     return (
-      <div className="container py-8">
+      <DashboardLayout>
         <div className="animate-pulse space-y-6">
           <div className="h-48 bg-muted rounded-lg" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -125,12 +126,13 @@ export default function Profile() {
             ))}
           </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="container py-8 space-y-8">
+    <DashboardLayout>
+      <div className="space-y-8">
       {/* Profile Header */}
       <Card>
         <CardContent className="pt-6">
@@ -551,6 +553,7 @@ export default function Profile() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

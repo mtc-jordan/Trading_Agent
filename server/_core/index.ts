@@ -9,6 +9,8 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { initializeWebSocket } from "./websocket";
 import { startMarketDataService } from "../services/marketData";
+import { initializeAlpacaStream } from "../services/alpacaWebSocket";
+import { JobScheduler } from "../services/jobScheduler";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -57,6 +59,14 @@ async function startServer() {
 
   // Start real-time market data service
   startMarketDataService();
+
+  // Initialize Alpaca WebSocket streaming for real-time prices
+  initializeAlpacaStream();
+
+  // Start the background job scheduler for price tracking and accuracy calculation
+  const jobScheduler = new JobScheduler();
+  jobScheduler.start(60000); // Check for jobs every 60 seconds
+  console.log('[Server] Background job scheduler started');
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);

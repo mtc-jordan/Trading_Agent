@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { useNotificationSubscription } from "@/hooks/useSocket";
 import { ConnectionStatus } from "@/components/ConnectionStatus";
@@ -106,21 +107,24 @@ export default function Notifications() {
 
   if (isLoading) {
     return (
-      <div className="container py-8">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 w-64 bg-muted rounded" />
-          <div className="space-y-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-24 bg-muted rounded-lg" />
-            ))}
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 w-64 bg-muted rounded" />
+            <div className="space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-24 bg-muted rounded-lg" />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="container py-8 space-y-8">
+    <DashboardLayout>
+      <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -291,6 +295,7 @@ export default function Notifications() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

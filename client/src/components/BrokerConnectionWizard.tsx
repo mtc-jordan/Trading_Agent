@@ -117,6 +117,26 @@ const BROKER_CONFIGS = {
     ],
     orderTypes: ['market', 'limit', 'stop'],
   },
+  schwab: {
+    name: 'Charles Schwab',
+    description: 'Full-service brokerage with stocks, ETFs, and options (formerly TD Ameritrade)',
+    logo: '/brokers/schwab.svg',
+    features: ['Stocks & ETFs', 'Options trading', 'Extended hours', 'Fractional shares', 'No commissions'],
+    apiKeyLabel: 'Client ID',
+    apiSecretLabel: 'Client Secret',
+    paperAvailable: false,
+    docsUrl: 'https://developer.schwab.com/',
+    apiKeyFormat: /^[A-Za-z0-9_-]{10,50}$/,
+    apiSecretFormat: /^[A-Za-z0-9_-]{20,100}$/,
+    setupInstructions: [
+      'Visit developer.schwab.com and create a developer account',
+      'Register a new application in the Developer Portal',
+      'Select "Accounts and Trading Production" API product',
+      'Configure OAuth redirect URI to match TradoVerse',
+      'Copy your Client ID and Client Secret'
+    ],
+    orderTypes: ['market', 'limit', 'stop', 'stop_limit', 'trailing_stop'],
+  },
 };
 
 type BrokerType = keyof typeof BROKER_CONFIGS;

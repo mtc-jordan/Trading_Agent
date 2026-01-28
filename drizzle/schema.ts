@@ -1780,7 +1780,7 @@ export type InsertExchangeOrder = typeof exchangeOrders.$inferInsert;
 export const brokerConnections = mysqlTable("broker_connections", {
   id: varchar("id", { length: 64 }).primaryKey(),
   userId: varchar("userId", { length: 64 }).notNull(),
-  brokerType: mysqlEnum("brokerType", ["alpaca", "interactive_brokers", "binance", "coinbase"]).notNull(),
+  brokerType: mysqlEnum("brokerType", ["alpaca", "interactive_brokers", "binance", "coinbase", "schwab"]).notNull(),
   isPaper: boolean("isPaper").default(true).notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   
@@ -1819,7 +1819,7 @@ export const oauthStates = mysqlTable("oauth_states", {
   id: varchar("id", { length: 64 }).primaryKey(),
   state: varchar("state", { length: 128 }).notNull().unique(),
   userId: varchar("userId", { length: 64 }).notNull(),
-  brokerType: mysqlEnum("brokerType", ["alpaca", "interactive_brokers", "binance", "coinbase"]).notNull(),
+  brokerType: mysqlEnum("brokerType", ["alpaca", "interactive_brokers", "binance", "coinbase", "schwab"]).notNull(),
   isPaper: boolean("isPaper").default(true).notNull(),
   
   // For PKCE (OAuth2)
@@ -2173,3 +2173,300 @@ export const templatePerformance = mysqlTable("template_performance", {
 });
 
 export type TemplatePerformance = typeof templatePerformance.$inferSelect;
+
+
+// ============================================
+// PHASE 57: Multi-Broker Architecture Extensions
+// ============================================
+
+/**
+ * Broker Watchlists - user watchlists synced with brokers
+ */
+export const brokerWatchlists = mysqlTable("broker_watchlists", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  connectionId: varchar("connectionId", { length: 64 }),
+  
+  name: varchar("name", { length: 100 }).notNull(),
+  symbols: json("symbols").notNull(), // Array of symbols
+  
+  // Sync with broker
+  brokerWatchlistId: varchar("brokerWatchlistId", { length: 100 }),
+  isSynced: boolean("isSynced").default(false),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type BrokerWatchlist = typeof brokerWatchlists.$inferSelect;
+export type InsertBrokerWatchlist = typeof brokerWatchlists.$inferInsert;
+
+/**
+ * Broker Activity Log - audit trail for all broker operations
+ */
+export const brokerActivityLogs = mysqlTable("broker_activity_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull(),
+  connectionId: varchar("connectionId", { length: 64 }),
+  
+  // Activity type
+  activityType: mysqlEnum("activityType", [
+    "connect",
+    "disconnect",
+    "order_placed",
+    "order_filled",
+    "order_cancelled",
+    "order_rejected",
+    "position_opened",
+    "position_closed",
+    "deposit",
+    "withdrawal",
+    "dividend",
+    "split",
+    "error"
+  ]).notNull(),
+  
+  // Details
+  symbol: varchar("symbol", { length: 50 }),
+  orderId: varchar("orderId", { length: 64 }),
+  description: text("description"),
+  metadata: json("metadata"),
+  
+  // Status
+  success: boolean("success").default(true).notNull(),
+  errorMessage: text("errorMessage"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BrokerActivityLog = typeof brokerActivityLogs.$inferSelect;
+export type InsertBrokerActivityLog = typeof brokerActivityLogs.$inferInsert;
+
+
+/**
+ * User Order Routing Preferences
+ * Configures how orders are routed to different brokers based on asset type
+ */
+export const userRoutingPreferences = mysqlTable("user_routing_preferences", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: varchar("userId", { length: 64 }).notNull().unique(),
+  
+  // Preferred brokers by asset class
+  preferredStockBroker: mysqlEnum("preferredStockBroker", ["alpaca", "interactive_brokers"]),
+  preferredCryptoBroker: mysqlEnum("preferredCryptoBroker", ["binance", "coinbase", "alpaca"]),
+  preferredForexBroker: mysqlEnum("preferredForexBroker", ["interactive_brokers"]),
+  preferredOptionsBroker: mysqlEnum("preferredOptionsBroker", ["interactive_brokers"]),
+  
+  // Routing behavior
+  enableSmartRouting: boolean("enableSmartRouting").default(true).notNull(),
+  prioritizeLowFees: boolean("prioritizeLowFees").default(false).notNull(),
+  prioritizeFastExecution: boolean("prioritizeFastExecution").default(false).notNull(),
+  allowFallback: boolean("allowFallback").default(true).notNull(),
+  
+  // Confirmation settings
+  confirmBeforeRouting: boolean("confirmBeforeRouting").default(true).notNull(),
+  showRoutingDecision: boolean("showRoutingDecision").default(true).notNull(),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserRoutingPreferencesRecord = typeof userRoutingPreferences.$inferSelect;
+export type InsertUserRoutingPreferences = typeof userRoutingPreferences.$inferInsert;
+
+
+/**
+ * Investment Theses - Tracks approved investment theses for performance tracking
+ */
+export const investmentTheses = mysqlTable("investment_theses", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  
+  // Thesis details
+  ticker: varchar("ticker", { length: 20 }).notNull(),
+  rating: mysqlEnum("rating", ["strong_buy", "buy", "hold", "sell", "strong_sell"]).notNull(),
+  convictionScore: decimal("convictionScore", { precision: 5, scale: 2 }).notNull(), // 0-100
+  targetPrice: decimal("targetPrice", { precision: 18, scale: 4 }),
+  targetDate: timestamp("targetDate"),
+  timeHorizon: mysqlEnum("timeHorizon", ["short", "medium", "long"]).default("medium"),
+  
+  // Price at thesis creation
+  entryPrice: decimal("entryPrice", { precision: 18, scale: 4 }).notNull(),
+  
+  // Agent signals at time of thesis
+  agentSignals: json("agentSignals").notNull(), // Snapshot of all agent signals
+  consensusDetails: json("consensusDetails"), // Full consensus breakdown
+  
+  // Thesis content
+  executiveSummary: text("executiveSummary"),
+  fullThesis: text("fullThesis"), // Markdown content
+  riskFactors: json("riskFactors"),
+  counterThesis: text("counterThesis"),
+  
+  // Status
+  status: mysqlEnum("status", ["pending", "approved", "rejected", "closed"]).default("pending").notNull(),
+  approvedAt: timestamp("approvedAt"),
+  closedAt: timestamp("closedAt"),
+  closeReason: varchar("closeReason", { length: 255 }),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type InvestmentThesis = typeof investmentTheses.$inferSelect;
+export type InsertInvestmentThesis = typeof investmentTheses.$inferInsert;
+
+/**
+ * Thesis Performance Records - Tracks actual performance vs predictions
+ */
+export const thesisPerformance = mysqlTable("thesis_performance", {
+  id: int("id").autoincrement().primaryKey(),
+  thesisId: int("thesisId").notNull(),
+  
+  // Performance snapshot
+  snapshotDate: timestamp("snapshotDate").notNull(),
+  currentPrice: decimal("currentPrice", { precision: 18, scale: 4 }).notNull(),
+  
+  // Returns
+  absoluteReturn: decimal("absoluteReturn", { precision: 18, scale: 4 }), // Dollar return
+  percentReturn: decimal("percentReturn", { precision: 10, scale: 4 }), // Percentage return
+  
+  // Benchmark comparison
+  benchmarkReturn: decimal("benchmarkReturn", { precision: 10, scale: 4 }), // S&P 500 return
+  alphaGenerated: decimal("alphaGenerated", { precision: 10, scale: 4 }), // Return vs benchmark
+  
+  // Target progress
+  targetProgress: decimal("targetProgress", { precision: 10, scale: 4 }), // % toward target price
+  
+  // Risk metrics
+  maxDrawdown: decimal("maxDrawdown", { precision: 10, scale: 4 }),
+  volatility: decimal("volatility", { precision: 10, scale: 4 }),
+  sharpeRatio: decimal("sharpeRatio", { precision: 10, scale: 4 }),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ThesisPerformance = typeof thesisPerformance.$inferSelect;
+export type InsertThesisPerformance = typeof thesisPerformance.$inferInsert;
+
+/**
+ * Agent Performance Tracking - Tracks individual agent accuracy over time
+ */
+export const agentPerformance = mysqlTable("agent_performance", {
+  id: int("id").autoincrement().primaryKey(),
+  
+  // Agent identification
+  agentType: varchar("agentType", { length: 50 }).notNull(), // fundamental, technical, sentiment, macro, portfolio
+  
+  // Performance period
+  periodStart: timestamp("periodStart").notNull(),
+  periodEnd: timestamp("periodEnd").notNull(),
+  
+  // Accuracy metrics
+  totalSignals: int("totalSignals").default(0).notNull(),
+  correctSignals: int("correctSignals").default(0).notNull(),
+  accuracy: decimal("accuracy", { precision: 5, scale: 4 }), // 0-1
+  
+  // Performance by signal type
+  bullishAccuracy: decimal("bullishAccuracy", { precision: 5, scale: 4 }),
+  bearishAccuracy: decimal("bearishAccuracy", { precision: 5, scale: 4 }),
+  neutralAccuracy: decimal("neutralAccuracy", { precision: 5, scale: 4 }),
+  
+  // Market condition performance
+  marketCondition: mysqlEnum("marketCondition", ["bull", "bear", "sideways", "volatile"]),
+  conditionAccuracy: decimal("conditionAccuracy", { precision: 5, scale: 4 }),
+  
+  // Weight recommendation
+  recommendedWeight: decimal("recommendedWeight", { precision: 5, scale: 4 }),
+  currentWeight: decimal("currentWeight", { precision: 5, scale: 4 }),
+  
+  // Additional metrics
+  avgConfidence: decimal("avgConfidence", { precision: 5, scale: 2 }),
+  avgReturnWhenCorrect: decimal("avgReturnWhenCorrect", { precision: 10, scale: 4 }),
+  avgReturnWhenWrong: decimal("avgReturnWhenWrong", { precision: 10, scale: 4 }),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type AgentPerformance = typeof agentPerformance.$inferSelect;
+export type InsertAgentPerformance = typeof agentPerformance.$inferInsert;
+
+/**
+ * Earnings Call Transcripts - Stores parsed earnings call data
+ */
+export const earningsCallTranscripts = mysqlTable("earnings_call_transcripts", {
+  id: int("id").autoincrement().primaryKey(),
+  
+  // Company identification
+  ticker: varchar("ticker", { length: 20 }).notNull(),
+  companyName: varchar("companyName", { length: 255 }),
+  
+  // Call details
+  callDate: timestamp("callDate").notNull(),
+  fiscalQuarter: varchar("fiscalQuarter", { length: 10 }), // Q1, Q2, Q3, Q4
+  fiscalYear: int("fiscalYear"),
+  callType: mysqlEnum("callType", ["earnings", "guidance", "analyst_day", "special"]).default("earnings"),
+  
+  // Transcript content
+  fullTranscript: text("fullTranscript"),
+  preparedRemarks: text("preparedRemarks"),
+  qaSection: text("qaSection"),
+  
+  // Participants
+  participants: json("participants"), // CEO, CFO, analysts, etc.
+  
+  // Sentiment analysis
+  overallSentiment: decimal("overallSentiment", { precision: 5, scale: 4 }), // -1 to 1
+  managementTone: decimal("managementTone", { precision: 5, scale: 4 }), // -1 to 1
+  analystTone: decimal("analystTone", { precision: 5, scale: 4 }), // -1 to 1
+  
+  // Detailed sentiment breakdown
+  sentimentBreakdown: json("sentimentBreakdown"), // By section, by speaker
+  
+  // Key phrases and topics
+  keyPhrases: json("keyPhrases"), // Important phrases extracted
+  forwardGuidance: json("forwardGuidance"), // Forward-looking statements
+  riskMentions: json("riskMentions"), // Risk-related mentions
+  
+  // Metrics mentioned
+  metricsDiscussed: json("metricsDiscussed"), // Revenue, margins, etc.
+  
+  // Source
+  sourceUrl: varchar("sourceUrl", { length: 500 }),
+  sourceProvider: varchar("sourceProvider", { length: 100 }),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type EarningsCallTranscript = typeof earningsCallTranscripts.$inferSelect;
+export type InsertEarningsCallTranscript = typeof earningsCallTranscripts.$inferInsert;
+
+/**
+ * Earnings Sentiment History - Tracks sentiment trends over time
+ */
+export const earningsSentimentHistory = mysqlTable("earnings_sentiment_history", {
+  id: int("id").autoincrement().primaryKey(),
+  
+  ticker: varchar("ticker", { length: 20 }).notNull(),
+  transcriptId: int("transcriptId").notNull(),
+  
+  // Sentiment metrics
+  sentimentScore: decimal("sentimentScore", { precision: 5, scale: 4 }).notNull(), // -1 to 1
+  confidenceScore: decimal("confidenceScore", { precision: 5, scale: 4 }), // 0 to 1
+  
+  // Comparison to previous
+  sentimentChange: decimal("sentimentChange", { precision: 5, scale: 4 }), // Change from last call
+  trendDirection: mysqlEnum("trendDirection", ["improving", "declining", "stable"]),
+  
+  // Correlation with price
+  priceAtCall: decimal("priceAtCall", { precision: 18, scale: 4 }),
+  priceAfter1Day: decimal("priceAfter1Day", { precision: 18, scale: 4 }),
+  priceAfter1Week: decimal("priceAfter1Week", { precision: 18, scale: 4 }),
+  priceAfter1Month: decimal("priceAfter1Month", { precision: 18, scale: 4 }),
+  
+  // Signal generated
+  signalGenerated: mysqlEnum("signalGenerated", ["bullish", "bearish", "neutral"]),
+  signalAccuracy: boolean("signalAccuracy"), // Was the signal correct?
+  
+  callDate: timestamp("callDate").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type EarningsSentimentHistory = typeof earningsSentimentHistory.$inferSelect;
+export type InsertEarningsSentimentHistory = typeof earningsSentimentHistory.$inferInsert;

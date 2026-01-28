@@ -2,8 +2,9 @@
  * Interactive Brokers Broker Adapter
  * 
  * Implements the IBrokerAdapter interface for Interactive Brokers.
- * Uses OAuth 1.0A Extended authentication with RSA-SHA256 signatures
- * and Diffie-Hellman key exchange for Live Session Tokens.
+ * Supports BOTH authentication methods:
+ * - OAuth 2.0 with JWT client assertion (recommended, simpler)
+ * - OAuth 1.0A Extended with RSA-SHA256 signatures (legacy)
  * 
  * Documentation: https://www.interactivebrokers.com/campus/ibkr-api-page/
  * 
@@ -40,12 +41,23 @@ import * as crypto from 'crypto';
 const IBKR_OAUTH_BASE = 'https://api.ibkr.com/v1/api';
 const IBKR_PORTAL_BASE = 'https://api.ibkr.com/v1/portal';
 
+// Authentication method type
+export type IBKRAuthMethod = 'oauth2' | 'oauth1';
+
 interface IBKRConfig {
-  consumerKey: string;
-  privateKey: string;  // RSA private key in PEM format
-  realm: string;
+  // OAuth 2.0 settings (recommended)
+  clientId?: string;
+  clientSecret?: string;
+  
+  // OAuth 1.0a settings (legacy)
+  consumerKey?: string;
+  privateKey?: string;  // RSA private key in PEM format
+  realm?: string;
+  
+  // Common settings
   redirectUri: string;
   isPaper: boolean;
+  authMethod?: IBKRAuthMethod;  // Default: 'oauth2'
 }
 
 interface OAuth1Params {
@@ -60,16 +72,30 @@ interface OAuth1Params {
   oauth_callback?: string;
 }
 
+// OAuth 2.0 endpoints
+const IBKR_OAUTH2_AUTHORIZE = 'https://www.interactivebrokers.com/authorize';
+const IBKR_OAUTH2_TOKEN = 'https://api.ibkr.com/v1/api/oauth2/api/v1/token';
+
 export class IBKRAdapter extends BaseBrokerAdapter {
   private config: IBKRConfig | null = null;
+  private authMethod: IBKRAuthMethod = 'oauth2';
+  
+  // OAuth 2.0 tokens
+  private accessToken: string | null = null;
+  private refreshToken: string | null = null;
+  private tokenExpiry: number = 0;
+  
+  // OAuth 1.0a tokens (legacy)
   private liveSessionToken: string | null = null;
   private liveSessionTokenExpiry: number = 0;
+  
   private accountId: string | null = null;
   
   constructor(config?: IBKRConfig) {
     super();
     if (config) {
       this.config = config;
+      this.authMethod = config.authMethod || 'oauth2';
     }
   }
   
@@ -117,7 +143,184 @@ export class IBKRAdapter extends BaseBrokerAdapter {
   }
   
   // ============================================================================
-  // OAuth 1.0A Authentication
+  // OAuth 2.0 Authentication (Recommended)
+  // ============================================================================
+  
+  /**
+   * Get OAuth 2.0 authorization URL
+   * Users will be redirected here to authorize the application
+   */
+  getOAuth2AuthorizationUrl(state: string, isPaper: boolean = true): string {
+    if (!this.config?.clientId) {
+      throw new BrokerError(
+        BrokerErrorCode.AUTHENTICATION_FAILED,
+        'IBKR OAuth 2.0 client ID not configured',
+        BrokerType.INTERACTIVE_BROKERS
+      );
+    }
+    
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: this.config.clientId,
+      redirect_uri: this.config.redirectUri,
+      scope: 'trading',
+      state: state,
+    });
+    
+    if (isPaper) {
+      params.append('paper', 'true');
+    }
+    
+    return `${IBKR_OAUTH2_AUTHORIZE}?${params.toString()}`;
+  }
+  
+  /**
+   * Exchange OAuth 2.0 authorization code for tokens
+   */
+  async handleOAuth2Callback(code: string, _state: string): Promise<TokenResponse> {
+    if (!this.config?.clientId) {
+      throw new BrokerError(
+        BrokerErrorCode.AUTHENTICATION_FAILED,
+        'IBKR OAuth 2.0 not configured',
+        BrokerType.INTERACTIVE_BROKERS
+      );
+    }
+    
+    // Create JWT client assertion for OAuth 2.0
+    const clientAssertion = await this.createJWTClientAssertion();
+    
+    const response = await fetch(IBKR_OAUTH2_TOKEN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        client_assertion: clientAssertion,
+        redirect_uri: this.config.redirectUri,
+      }).toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new BrokerError(
+        BrokerErrorCode.AUTHENTICATION_FAILED,
+        `IBKR OAuth 2.0 error: ${error}`,
+        BrokerType.INTERACTIVE_BROKERS
+      );
+    }
+
+    const data = await response.json();
+    
+    this.accessToken = data.access_token;
+    this.refreshToken = data.refresh_token || null;
+    this.tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+    this.connected = true;
+
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in,
+      tokenType: data.token_type,
+      scope: data.scope,
+    };
+  }
+  
+  /**
+   * Refresh OAuth 2.0 access token
+   */
+  async refreshOAuth2Token(): Promise<TokenResponse> {
+    if (!this.refreshToken || !this.config?.clientId) {
+      throw new BrokerError(
+        BrokerErrorCode.AUTHENTICATION_FAILED,
+        'No refresh token available',
+        BrokerType.INTERACTIVE_BROKERS
+      );
+    }
+
+    const clientAssertion = await this.createJWTClientAssertion();
+    
+    const response = await fetch(IBKR_OAUTH2_TOKEN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: this.refreshToken,
+        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        client_assertion: clientAssertion,
+      }).toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new BrokerError(
+        BrokerErrorCode.AUTHENTICATION_FAILED,
+        `IBKR token refresh error: ${error}`,
+        BrokerType.INTERACTIVE_BROKERS
+      );
+    }
+
+    const data = await response.json();
+    
+    this.accessToken = data.access_token;
+    this.refreshToken = data.refresh_token || this.refreshToken;
+    this.tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in,
+      tokenType: data.token_type,
+    };
+  }
+  
+  /**
+   * Create JWT client assertion for OAuth 2.0
+   * IBKR requires private_key_jwt authentication method
+   */
+  private async createJWTClientAssertion(): Promise<string> {
+    if (!this.config?.clientId) {
+      throw new Error('Client ID not configured');
+    }
+    
+    const header = {
+      alg: 'RS256',
+      typ: 'JWT',
+    };
+    
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: this.config.clientId,
+      sub: this.config.clientId,
+      aud: IBKR_OAUTH2_TOKEN,
+      exp: now + 300, // 5 minutes
+      iat: now,
+      jti: crypto.randomUUID(),
+    };
+
+    const base64Header = Buffer.from(JSON.stringify(header)).toString('base64url');
+    const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const unsignedToken = `${base64Header}.${base64Payload}`;
+    
+    // Sign with private key if available
+    if (this.config.privateKey) {
+      const sign = crypto.createSign('RSA-SHA256');
+      sign.update(unsignedToken);
+      const signature = sign.sign(this.config.privateKey, 'base64url');
+      return `${unsignedToken}.${signature}`;
+    }
+    
+    // For development/testing without private key
+    // In production, this will fail - users must provide private key
+    return `${unsignedToken}.development_signature`;
+  }
+  
+  // ============================================================================
+  // OAuth 1.0A Authentication (Legacy)
   // ============================================================================
   
   /**
@@ -146,6 +349,9 @@ export class IBKRAdapter extends BaseBrokerAdapter {
     ].join('&');
     
     // Sign with RSA-SHA256
+    if (!this.config?.privateKey) {
+      throw new Error('Private key not configured for OAuth 1.0a');
+    }
     const sign = crypto.createSign('RSA-SHA256');
     sign.update(signatureBase);
     const signature = sign.sign(this.config.privateKey, 'base64');
@@ -188,7 +394,7 @@ export class IBKRAdapter extends BaseBrokerAdapter {
     const nonce = this.generateNonce();
     
     const params: OAuth1Params = {
-      oauth_consumer_key: this.config.consumerKey,
+      oauth_consumer_key: this.config.consumerKey || '',
       oauth_signature_method: 'RSA-SHA256',
       oauth_timestamp: timestamp,
       oauth_nonce: nonce,
@@ -226,16 +432,37 @@ export class IBKRAdapter extends BaseBrokerAdapter {
   
   /**
    * Get authorization URL for user to approve
+   * Supports both OAuth 2.0 and OAuth 1.0a based on configuration
    */
-  getAuthorizationUrl(state: string, _isPaper: boolean = true): string {
-    // Note: state is used to store the request token
+  getAuthorizationUrl(state: string, isPaper: boolean = true): string {
+    if (this.authMethod === 'oauth2') {
+      return this.getOAuth2AuthorizationUrl(state, isPaper);
+    }
+    // OAuth 1.0a: state is used to store the request token
     return `${IBKR_OAUTH_BASE}/oauth/authorize?oauth_token=${state}`;
   }
   
   /**
-   * Step 3: Exchange verifier for Access Token
+   * Handle OAuth callback - supports both OAuth 2.0 and OAuth 1.0a
    */
   async handleOAuthCallback(
+    code: string,
+    state: string,
+    verifier?: string
+  ): Promise<TokenResponse> {
+    // Use OAuth 2.0 if configured
+    if (this.authMethod === 'oauth2') {
+      return this.handleOAuth2Callback(code, state);
+    }
+    
+    // Fall back to OAuth 1.0a
+    return this.handleOAuth1Callback(code, state, verifier || '');
+  }
+  
+  /**
+   * OAuth 1.0a callback handler (legacy)
+   */
+  private async handleOAuth1Callback(
     _code: string,  // Not used in OAuth1
     requestToken: string,
     verifier: string
@@ -253,7 +480,7 @@ export class IBKRAdapter extends BaseBrokerAdapter {
     const nonce = this.generateNonce();
     
     const params: OAuth1Params = {
-      oauth_consumer_key: this.config.consumerKey,
+      oauth_consumer_key: this.config.consumerKey || '',
       oauth_signature_method: 'RSA-SHA256',
       oauth_timestamp: timestamp,
       oauth_nonce: nonce,
@@ -313,7 +540,7 @@ export class IBKRAdapter extends BaseBrokerAdapter {
     const nonce = this.generateNonce();
     
     const params: OAuth1Params = {
-      oauth_consumer_key: this.config.consumerKey,
+      oauth_consumer_key: this.config.consumerKey || '',
       oauth_signature_method: 'RSA-SHA256',
       oauth_timestamp: timestamp,
       oauth_nonce: nonce,
@@ -368,7 +595,12 @@ export class IBKRAdapter extends BaseBrokerAdapter {
   }
   
   async refreshAccessToken(): Promise<TokenResponse> {
-    // IBKR uses LST refresh instead of token refresh
+    // Use OAuth 2.0 refresh if configured
+    if (this.authMethod === 'oauth2' && this.refreshToken) {
+      return this.refreshOAuth2Token();
+    }
+    
+    // OAuth 1.0a: IBKR uses LST refresh instead of token refresh
     const lst = await this.computeLiveSessionToken();
     return {
       accessToken: lst,
@@ -377,8 +609,14 @@ export class IBKRAdapter extends BaseBrokerAdapter {
   }
   
   needsTokenRefresh(): boolean {
+    if (this.authMethod === 'oauth2') {
+      if (!this.accessToken) return true;
+      // Refresh if less than 5 minutes until expiry
+      return Date.now() > (this.tokenExpiry - 5 * 60 * 1000);
+    }
+    
+    // OAuth 1.0a
     if (!this.liveSessionToken) return true;
-    // Refresh if less than 5 minutes until expiry
     return Date.now() > (this.liveSessionTokenExpiry - 5 * 60 * 1000);
   }
   
@@ -390,43 +628,73 @@ export class IBKRAdapter extends BaseBrokerAdapter {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    if (!this.config || !this.credentials) {
+    // Check authentication
+    const isOAuth2 = this.authMethod === 'oauth2';
+    
+    if (isOAuth2 && !this.accessToken) {
       throw new BrokerError(
         BrokerErrorCode.AUTHENTICATION_FAILED,
-        'Not authenticated',
+        'Not authenticated (OAuth 2.0)',
         BrokerType.INTERACTIVE_BROKERS
       );
     }
     
-    // Ensure we have a valid LST
-    if (this.needsTokenRefresh()) {
-      await this.computeLiveSessionToken();
+    if (!isOAuth2 && (!this.config || !this.credentials)) {
+      throw new BrokerError(
+        BrokerErrorCode.AUTHENTICATION_FAILED,
+        'Not authenticated (OAuth 1.0a)',
+        BrokerType.INTERACTIVE_BROKERS
+      );
     }
     
-    const oauth = this.credentials as OAuth1Credentials;
+    // Refresh token if needed
+    if (this.needsTokenRefresh()) {
+      if (isOAuth2) {
+        await this.refreshOAuth2Token();
+      } else {
+        await this.computeLiveSessionToken();
+      }
+    }
+    
     const url = `${IBKR_PORTAL_BASE}${endpoint}`;
     const method = options.method || 'GET';
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const nonce = this.generateNonce();
     
-    const params: OAuth1Params = {
-      oauth_consumer_key: this.config.consumerKey,
-      oauth_signature_method: 'RSA-SHA256',
-      oauth_timestamp: timestamp,
-      oauth_nonce: nonce,
-      oauth_version: '1.0',
-      oauth_token: oauth.accessToken
-    };
+    let headers: Record<string, string>;
     
-    params.oauth_signature = this.generateSignature(method, url, params, oauth.accessTokenSecret);
+    if (isOAuth2) {
+      // OAuth 2.0: Use Bearer token
+      headers = {
+        'Authorization': `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string>)
+      };
+    } else {
+      // OAuth 1.0a: Use signed request
+      const oauth = this.credentials as OAuth1Credentials;
+      const timestamp = Math.floor(Date.now() / 1000).toString();
+      const nonce = this.generateNonce();
+      
+      const params: OAuth1Params = {
+        oauth_consumer_key: this.config!.consumerKey!,
+        oauth_signature_method: 'RSA-SHA256',
+        oauth_timestamp: timestamp,
+        oauth_nonce: nonce,
+        oauth_version: '1.0',
+        oauth_token: oauth.accessToken
+      };
+      
+      params.oauth_signature = this.generateSignature(method, url, params, oauth.accessTokenSecret);
+      
+      headers = {
+        'Authorization': this.generateAuthHeader(params),
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string>)
+      };
+    }
     
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Authorization': this.generateAuthHeader(params),
-        'Content-Type': 'application/json',
-        ...options.headers
-      }
+      headers
     });
     
     if (!response.ok) {

@@ -142,93 +142,27 @@ const jobProcessors: Record<JobType, (payload: JobPayload) => Promise<JobResult>
     }
   },
 
-  price_tracking: async (payload) => {
-    const db = await getDb();
-    if (!db) return { success: false, message: "Database not available" };
-
-    const { symbols } = payload;
-    if (!symbols || symbols.length === 0) {
-      return { success: false, message: "No symbols to track" };
-    }
-
-    let tracked = 0;
-    for (const symbol of symbols) {
-      try {
-        // In production, fetch real price from market data service
-        const mockPrice = 100 + Math.random() * 100;
-        
-        await db.insert(priceTracking).values({
-          symbol,
-          analysisId: 0,
-          priceAtRecommendation: String(mockPrice),
-          recommendedAction: "hold",
-          confidence: "0.5",
-          recommendedAt: new Date(),
-        });
-        tracked++;
-      } catch (error) {
-        console.error(`Failed to track price for ${symbol}:`, error);
-      }
-    }
-
+  price_tracking: async (_payload) => {
+    // Use the comprehensive price tracking service
+    const { runPriceTrackingJob } = await import('./priceTrackingService');
+    const result = await runPriceTrackingJob();
+    
     return {
-      success: true,
-      message: `Tracked prices for ${tracked} symbols`,
-      itemsProcessed: tracked,
+      success: result.success,
+      message: result.details.join('; '),
+      itemsProcessed: result.tracked,
     };
   },
 
-  accuracy_calculation: async (payload) => {
-    const db = await getDb();
-    if (!db) return { success: false, message: "Database not available" };
-
-    const { userId } = payload;
-
-    // Get all analyses with price tracking data
-    const analyses = await db
-      .select()
-      .from(agentAnalyses)
-      .where(userId ? eq(agentAnalyses.userId, userId) : sql`1=1`)
-      .limit(100);
-
-    let calculated = 0;
-    for (const analysis of analyses) {
-      try {
-        // Get price tracking for this analysis
-        const [tracking] = await db
-          .select()
-          .from(priceTracking)
-          .where(eq(priceTracking.analysisId, analysis.id));
-
-        if (tracking && tracking.price1Day) {
-          const predicted = Number(tracking.priceAtRecommendation);
-          const actual = Number(tracking.price1Day);
-          const accuracy = 1 - Math.abs(predicted - actual) / actual;
-          const isCorrect = accuracy >= 0.95; // Within 5% is considered correct
-
-          // Update or insert accuracy record
-          await db.insert(predictionAccuracy).values({
-            userId: analysis.userId,
-            agentType: "consensus", // Default to consensus for now
-            symbol: analysis.symbol,
-            timeframe: "1day",
-            totalPredictions: 1,
-            correctPredictions: isCorrect ? 1 : 0,
-            accuracyRate: String(accuracy),
-            periodStart: analysis.createdAt,
-            periodEnd: tracking.lastUpdatedAt || new Date(),
-          });
-          calculated++;
-        }
-      } catch (error) {
-        console.error(`Failed to calculate accuracy for analysis ${analysis.id}:`, error);
-      }
-    }
-
+  accuracy_calculation: async (_payload) => {
+    // Use the comprehensive price tracking service for accuracy calculation
+    const { calculatePredictionAccuracy } = await import('./priceTrackingService');
+    const result = await calculatePredictionAccuracy();
+    
     return {
-      success: true,
-      message: `Calculated accuracy for ${calculated} predictions`,
-      itemsProcessed: calculated,
+      success: result.success,
+      message: result.details.join('; '),
+      itemsProcessed: result.tracked,
     };
   },
 

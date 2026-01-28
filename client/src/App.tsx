@@ -5,6 +5,7 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { BrokerProvider } from "./contexts/BrokerContext";
+import { AssetClassProvider } from "./contexts/AssetClassContext";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Analysis from "./pages/Analysis";
@@ -35,7 +36,7 @@ import PaperTrading from "./pages/PaperTrading";
 import Alerts from "./pages/Alerts";
 import CopyTrading from "./pages/CopyTrading";
 import TradingJournal from "./pages/TradingJournal";
-import ExchangeConnections from "./pages/ExchangeConnections";
+
 import BrokerConnections from "./pages/BrokerConnections";
 import OrderHistory from "./pages/OrderHistory";
 import BrokerAnalytics from "./pages/BrokerAnalytics";
@@ -48,6 +49,37 @@ import StrategyBacktester from "./pages/StrategyBacktester";
 import AgentWeightVisualization from "./pages/AgentWeightVisualization";
 import BacktestComparison from "./pages/BacktestComparison";
 import WeightOptimizationWizard from "./pages/WeightOptimizationWizard";
+import AgentCommunicationHub from "./pages/AgentCommunicationHub";
+import MarketRegimeAdaptation from "./pages/MarketRegimeAdaptation";
+import MultiAssetCorrelation from "./pages/MultiAssetCorrelation";
+import SocialSentiment from "./pages/SocialSentiment";
+import PortfolioStressTesting from "./pages/PortfolioStressTesting";
+import AgentLeaderboard from "./pages/AgentLeaderboard";
+import StrategyGenerator from "./pages/StrategyGenerator";
+import StrategyBacktest from "./pages/StrategyBacktest";
+import StrategyAlerts from "./pages/StrategyAlerts";
+import BrokerConnect from "./pages/BrokerConnect";
+import UnifiedTrading from "./pages/UnifiedTrading";
+import WatchlistAlerts from "./pages/WatchlistAlerts";
+import MultiAssetTrading from "./pages/MultiAssetTrading";
+import BrokerComparison from "./pages/BrokerComparison";
+import MultiAssetAnalysis from "./pages/MultiAssetAnalysis";
+import MultiAgentDashboard from "./pages/MultiAgentDashboard";
+import OptionsGreeksDashboard from "./pages/OptionsGreeksDashboard";
+import LiveOptionsChain from "./pages/LiveOptionsChain";
+import StockIntelligenceDashboard from "./pages/StockIntelligenceDashboard";
+import SECFilingsDashboard from "./pages/SECFilingsDashboard";
+import PerformanceTrackerDashboard from "./pages/PerformanceTrackerDashboard";
+import EarningsCallDashboard from "./pages/EarningsCallDashboard";
+import LiveEarningsCallDashboard from "./pages/LiveEarningsCallDashboard";
+import EarningsBacktesterDashboard from "./pages/EarningsBacktesterDashboard";
+import CryptoAIDashboard from "./pages/CryptoAIDashboard";
+import LiveFundingDashboard from "./pages/LiveFundingDashboard";
+import InstitutionalRiskDashboard from "./pages/InstitutionalRiskDashboard";
+import BasisBacktestDashboard from "./pages/BasisBacktestDashboard";
+import SwarmIntelligenceDashboard from "./pages/SwarmIntelligenceDashboard";
+import RealTimeTradingDashboard from "./pages/RealTimeTradingDashboard";
+import AICommandCenter from "./pages/AICommandCenter";
 
 function Router() {
   return (
@@ -57,6 +89,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/analysis" component={Analysis} />
       <Route path="/enhanced-analysis" component={EnhancedAnalysis} />
+      <Route path="/multi-asset-analysis" component={MultiAssetAnalysis} />
       <Route path="/bots" component={Bots} />
       <Route path="/backtest" component={Backtest} />
       <Route path="/portfolio" component={Portfolio} />
@@ -66,6 +99,7 @@ function Router() {
       <Route path="/analysis-history" component={AnalysisHistory} />
       <Route path="/accuracy" component={AccuracyDashboard} />
       <Route path="/notifications" component={Notifications} />
+      <Route path="/watchlist-alerts" component={WatchlistAlerts} />
       <Route path="/community" component={Community} />
       <Route path="/profile" component={Profile} />
       <Route path="/schedules" component={BotSchedules} />
@@ -82,8 +116,8 @@ function Router() {
       <Route path="/alerts" component={Alerts} />
       <Route path="/copy-trading" component={CopyTrading} />
       <Route path="/journal" component={TradingJournal} />
-      <Route path="/exchanges" component={ExchangeConnections} />
-      <Route path="/brokers" component={BrokerConnections} />
+      <Route path="/brokers" component={BrokerConnect} />
+      <Route path="/broker-comparison" component={BrokerComparison} />
       <Route path="/order-history" component={OrderHistory} />
       <Route path="/broker-analytics" component={BrokerAnalytics} />
       <Route path="/rebalancing" component={PortfolioRebalancing} />
@@ -95,6 +129,34 @@ function Router() {
       <Route path="/agent-weights" component={AgentWeightVisualization} />
       <Route path="/backtest-comparison" component={BacktestComparison} />
       <Route path="/weight-optimization" component={WeightOptimizationWizard} />
+      <Route path="/agent-hub" component={AgentCommunicationHub} />
+      <Route path="/regime-adaptation" component={MarketRegimeAdaptation} />
+      <Route path="/correlation-engine" component={MultiAssetCorrelation} />
+      <Route path="/multi-agent" component={MultiAgentDashboard} />
+      <Route path="/options-greeks" component={OptionsGreeksDashboard} />
+      <Route path="/live-options" component={LiveOptionsChain} />
+      <Route path="/stock-intelligence" component={StockIntelligenceDashboard} />
+      <Route path="/sec-filings" component={SECFilingsDashboard} />
+      <Route path="/performance-tracker" component={PerformanceTrackerDashboard} />
+      <Route path="/earnings-calls" component={EarningsCallDashboard} />
+      <Route path="/live-earnings" component={LiveEarningsCallDashboard} />
+      <Route path="/earnings-backtester" component={EarningsBacktesterDashboard} />
+      <Route path="/crypto-ai" component={CryptoAIDashboard} />
+      <Route path="/live-funding" component={LiveFundingDashboard} />
+      <Route path="/institutional-risk" component={InstitutionalRiskDashboard} />
+      <Route path="/basis-backtest" component={BasisBacktestDashboard} />
+      <Route path="/swarm-intelligence" component={SwarmIntelligenceDashboard} />
+      <Route path="/realtime-trading" component={RealTimeTradingDashboard} />
+      <Route path="/command-center" component={AICommandCenter} />
+      <Route path="/social-sentiment" component={SocialSentiment} />
+      <Route path="/stress-testing" component={PortfolioStressTesting} />
+      <Route path="/agent-leaderboard" component={AgentLeaderboard} />
+      <Route path="/strategy-generator" component={StrategyGenerator} />
+      <Route path="/strategy-backtest" component={StrategyBacktest} />
+      <Route path="/strategy-alerts" component={StrategyAlerts} />
+      <Route path="/broker-connect" component={BrokerConnect} />
+      <Route path="/unified-trading" component={UnifiedTrading} />
+      <Route path="/multi-asset-trading" component={MultiAssetTrading} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -106,10 +168,12 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark">
         <BrokerProvider>
-          <TooltipProvider>
+          <AssetClassProvider>
+            <TooltipProvider>
             <Toaster />
             <Router />
           </TooltipProvider>
+            </AssetClassProvider>
         </BrokerProvider>
       </ThemeProvider>
     </ErrorBoundary>

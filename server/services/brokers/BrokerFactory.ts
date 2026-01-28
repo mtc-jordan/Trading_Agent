@@ -9,6 +9,9 @@
 import { IBrokerAdapter } from './IBrokerAdapter';
 import { AlpacaAdapter } from './AlpacaAdapter';
 import { IBKRAdapter } from './IBKRAdapter';
+import { BinanceBrokerAdapter } from './BinanceBrokerAdapter';
+import { CoinbaseBrokerAdapter } from './CoinbaseBrokerAdapter';
+import { SchwabAdapter } from './SchwabAdapter';
 import {
   BrokerType,
   BrokerCredentials,
@@ -33,6 +36,21 @@ interface BrokerConfig {
     consumerKey: string;
     privateKey: string;
     realm: string;
+    redirectUri: string;
+  };
+  binance?: {
+    apiKey: string;
+    secretKey: string;
+    testnet?: boolean;
+  };
+  coinbase?: {
+    apiKeyId: string;
+    apiKeySecret: string;
+    sandbox?: boolean;
+  };
+  schwab?: {
+    clientId: string;
+    clientSecret: string;
     redirectUri: string;
   };
 }
@@ -124,7 +142,7 @@ export const BROKER_INFO: Record<BrokerType, BrokerInfo> = {
       supportsStreamingTrades: true,
       maxOrdersPerMinute: 50
     },
-    authType: 'oauth1',
+    authType: 'oauth2',  // OAuth 2.0 (recommended) or OAuth 1.0a (legacy)
     requiresApproval: true,
     approvalUrl: 'https://www.interactivebrokers.com/en/trading/ib-api.php',
     supportedRegions: ['US', 'EU', 'APAC']
@@ -203,6 +221,47 @@ export const BROKER_INFO: Record<BrokerType, BrokerInfo> = {
     authType: 'oauth2',
     requiresApproval: false,
     supportedRegions: ['US']
+  },
+  [BrokerType.SCHWAB]: {
+    type: BrokerType.SCHWAB,
+    name: 'Charles Schwab',
+    description: 'Full-service brokerage with stocks, ETFs, and options trading (formerly TD Ameritrade)',
+    logoUrl: '/brokers/schwab.svg',
+    websiteUrl: 'https://www.schwab.com',
+    documentationUrl: 'https://developer.schwab.com/',
+    capabilities: {
+      supportedAssetClasses: [AssetClass.US_EQUITY, AssetClass.OPTIONS],
+      supportedOrderTypes: [
+        OrderType.MARKET,
+        OrderType.LIMIT,
+        OrderType.STOP,
+        OrderType.STOP_LIMIT,
+        OrderType.TRAILING_STOP
+      ],
+      supportedTimeInForce: [
+        TimeInForce.DAY,
+        TimeInForce.GTC,
+        TimeInForce.IOC,
+        TimeInForce.FOK
+      ],
+      supportsExtendedHours: true,
+      supportsFractionalShares: true,
+      supportsShortSelling: true,
+      supportsMarginTrading: true,
+      supportsOptionsTrading: true,
+      supportsCryptoTrading: false,
+      supportsForexTrading: false,
+      supportsPaperTrading: false,
+      supportsWebSocket: true,
+      supportsStreamingQuotes: true,
+      supportsStreamingBars: true,
+      supportsStreamingTrades: true,
+      maxOrdersPerMinute: 120
+    },
+    authType: 'oauth2',
+    requiresApproval: true,
+    approvalUrl: 'https://developer.schwab.com/',
+    supportedRegions: ['US']
   }
 };
 
@@ -241,12 +300,19 @@ export class BrokerFactory {
         });
         
       case BrokerType.BINANCE:
-        // Placeholder for future implementation
-        throw new Error('Binance adapter not yet implemented');
+        return new BinanceBrokerAdapter();
         
       case BrokerType.COINBASE:
-        // Placeholder for future implementation
-        throw new Error('Coinbase adapter not yet implemented');
+        return new CoinbaseBrokerAdapter();
+        
+      case BrokerType.SCHWAB:
+        if (!this.config.schwab) {
+          throw new Error('Schwab configuration not provided');
+        }
+        return new SchwabAdapter({
+          ...this.config.schwab,
+          isPaper: false // Schwab doesn't support paper trading
+        });
         
       default:
         throw new Error(`Unknown broker type: ${brokerType}`);

@@ -6,6 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "./db";
 import { runAgentConsensus, getAvailableAgents } from "./services/aiAgents";
+import { commandCenterDataService } from "./services/commandcenter/CommandCenterDataService";
 import { runEnhancedAnalysis, EnhancedAnalysisResult } from "./services/enhancedAnalysis";
 import { 
   encryptApiKey, 
@@ -29,6 +30,28 @@ import { runWalkForwardOptimization, runQuickWalkForward, WalkForwardConfig } fr
 import { runPortfolioBacktest, runQuickPortfolioAnalysis, PortfolioConfig } from "./services/portfolioBacktesting";
 import { analyzeMarketRegime, getQuickRegime, RegimeConfig } from "./services/regimeSwitching";
 import { calculateGreeks, calculateImpliedVolatility, generateGreeksVisualization, generateOptionChain, analyzeStrategy, OptionInput } from "./services/optionsGreeks";
+import {
+  fetchOptionsChain,
+  getOptionsNearMoney,
+  getATMStraddle,
+  getAlpacaOptionsStatus,
+  EnhancedOptionData
+} from "./services/alpacaOptions";
+import {
+  analyzeLiveOptions,
+  getOptionsChainWithGreeks,
+  getLiveIVSurface,
+  createOptionsAlert,
+  getActiveAlerts,
+  removeAlert,
+  clearOptionsCache,
+  getCacheStatus
+} from "./services/liveOptionsAnalyzer";
+import {
+  analyzeLiveVolatilitySurface,
+  getIVRank,
+  getVolatilitySurfaceSummary
+} from "./services/liveVolatilitySurface";
 import { analyzeSentiment, getQuickSentiment, analyzeBatchSentiment } from "./services/sentimentAnalysis";
 import { 
   getCryptoPrice, 
@@ -50,6 +73,9 @@ import {
   calculatePerformanceMetrics,
   resetPaperAccount
 } from "./services/paperTrading";
+import { secEdgarService } from "./services/sec-edgar/SECEdgarService";
+import { secFilingRAG } from "./services/sec-edgar/SECFilingRAG";
+import { enhancedFundamentalAnalyst } from "./services/stock-intelligence/EnhancedFundamentalAnalyst";
 import {
   createPriceAlert,
   createRegimeAlert,
@@ -2821,6 +2847,130 @@ export const appRouter = router({
           input.volatility
         );
       }),
+
+    // Live Options Chain from Alpaca
+    liveChain: protectedProcedure
+      .input(z.object({
+        underlying: z.string(),
+        type: z.enum(['call', 'put']).optional(),
+        minStrike: z.number().optional(),
+        maxStrike: z.number().optional(),
+        minDaysToExpiry: z.number().optional(),
+        maxDaysToExpiry: z.number().optional(),
+        limit: z.number().max(1000).optional(),
+      }))
+      .query(async ({ input }) => {
+        return getOptionsChainWithGreeks(input.underlying, {
+          type: input.type,
+          minStrike: input.minStrike,
+          maxStrike: input.maxStrike,
+          minDaysToExpiry: input.minDaysToExpiry,
+          maxDaysToExpiry: input.maxDaysToExpiry,
+          limit: input.limit,
+        });
+      }),
+
+    // Live Options Analysis
+    liveAnalysis: protectedProcedure
+      .input(z.object({
+        underlying: z.string(),
+        spotPrice: z.number().positive(),
+      }))
+      .query(async ({ input }) => {
+        return analyzeLiveOptions(input.underlying, input.spotPrice);
+      }),
+
+    // ATM Straddle Pricing
+    atmStraddle: protectedProcedure
+      .input(z.object({
+        underlying: z.string(),
+        spotPrice: z.number().positive(),
+        targetDTE: z.number().min(1).max(365).default(30),
+      }))
+      .query(async ({ input }) => {
+        return getATMStraddle(input.underlying, input.spotPrice, input.targetDTE);
+      }),
+
+    // IV Surface Analysis
+    ivSurface: protectedProcedure
+      .input(z.object({
+        underlying: z.string(),
+        spotPrice: z.number().positive(),
+      }))
+      .query(async ({ input }) => {
+        return getLiveIVSurface(input.underlying, input.spotPrice);
+      }),
+
+    // Full Volatility Surface Analysis
+    volatilitySurface: protectedProcedure
+      .input(z.object({
+        underlying: z.string(),
+        spotPrice: z.number().positive(),
+      }))
+      .query(async ({ input }) => {
+        return analyzeLiveVolatilitySurface(input.underlying, input.spotPrice);
+      }),
+
+    // IV Rank
+    ivRank: protectedProcedure
+      .input(z.object({
+        underlying: z.string(),
+        spotPrice: z.number().positive(),
+      }))
+      .query(async ({ input }) => {
+        return getIVRank(input.underlying, input.spotPrice);
+      }),
+
+    // Surface Summary
+    surfaceSummary: protectedProcedure
+      .input(z.object({
+        underlying: z.string(),
+        spotPrice: z.number().positive(),
+      }))
+      .query(async ({ input }) => {
+        return getVolatilitySurfaceSummary(input.underlying, input.spotPrice);
+      }),
+
+    // Options Alerts
+    createAlert: protectedProcedure
+      .input(z.object({
+        underlying: z.string(),
+        condition: z.enum(['iv_spike', 'iv_crush', 'unusual_volume', 'gamma_squeeze', 'delta_threshold']),
+        threshold: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        return createOptionsAlert(input.underlying, input.condition, input.threshold);
+      }),
+
+    getAlerts: protectedProcedure
+      .query(async () => {
+        return getActiveAlerts();
+      }),
+
+    removeAlert: protectedProcedure
+      .input(z.object({ alertId: z.string() }))
+      .mutation(async ({ input }) => {
+        return removeAlert(input.alertId);
+      }),
+
+    // Cache Management
+    clearCache: protectedProcedure
+      .input(z.object({ underlying: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        clearOptionsCache(input.underlying);
+        return { success: true };
+      }),
+
+    cacheStatus: protectedProcedure
+      .query(async () => {
+        return getCacheStatus();
+      }),
+
+    // Alpaca Options Status
+    alpacaStatus: protectedProcedure
+      .query(async () => {
+        return getAlpacaOptionsStatus();
+      }),
   }),
 
   // Sentiment Analysis
@@ -3493,51 +3643,87 @@ export const appRouter = router({
         };
       }),
 
-    // Start OAuth flow for Interactive Brokers
+    // Start OAuth flow for Interactive Brokers (OAuth 2.0)
     startIBKROAuth: protectedProcedure
       .input(z.object({
         isPaper: z.boolean().default(true),
-        redirectUri: z.string()
+        redirectUri: z.string(),
+        authMethod: z.enum(['oauth2', 'oauth1']).default('oauth2')
       }))
       .mutation(async ({ ctx, input }) => {
+        // OAuth 2.0 credentials (recommended)
+        const clientId = process.env.IBKR_CLIENT_ID;
+        const clientSecret = process.env.IBKR_CLIENT_SECRET;
+        
+        // OAuth 1.0a credentials (legacy)
         const consumerKey = process.env.IBKR_CONSUMER_KEY;
         const privateKey = process.env.IBKR_PRIVATE_KEY;
         const realm = process.env.IBKR_REALM || 'limited_poa';
         
-        if (!consumerKey || !privateKey) {
+        // Determine auth method based on available credentials
+        const useOAuth2 = input.authMethod === 'oauth2' && clientId;
+        
+        if (useOAuth2) {
+          // OAuth 2.0 flow
+          const adapter = new IBKRAdapter({
+            clientId,
+            clientSecret,
+            redirectUri: input.redirectUri,
+            isPaper: input.isPaper,
+            authMethod: 'oauth2'
+          });
+          
+          // Create OAuth state
+          const oauthState = await createOAuthState(
+            String(ctx.user.id),
+            BrokerType.INTERACTIVE_BROKERS,
+            input.isPaper
+          );
+          
+          const authUrl = adapter.getAuthorizationUrl(oauthState.state, input.isPaper);
+          
+          return {
+            authUrl,
+            state: oauthState.state,
+            authMethod: 'oauth2' as const
+          };
+        } else if (consumerKey && privateKey) {
+          // OAuth 1.0a flow (legacy)
+          const adapter = new IBKRAdapter({
+            consumerKey,
+            privateKey,
+            realm,
+            redirectUri: input.redirectUri,
+            isPaper: input.isPaper,
+            authMethod: 'oauth1'
+          });
+          
+          // Get request token for OAuth1
+          const requestTokenResult = await adapter.getRequestToken();
+          
+          // Create OAuth state with request token
+          const oauthState = await createOAuthState(
+            String(ctx.user.id),
+            BrokerType.INTERACTIVE_BROKERS,
+            input.isPaper,
+            undefined,
+            requestTokenResult.token,
+            requestTokenResult.tokenSecret
+          );
+          
+          const authUrl = adapter.getAuthorizationUrl(oauthState.state, input.isPaper);
+          
+          return {
+            authUrl,
+            state: oauthState.state,
+            authMethod: 'oauth1' as const
+          };
+        } else {
           throw new TRPCError({
             code: 'PRECONDITION_FAILED',
-            message: 'Interactive Brokers API credentials not configured. Please add IBKR_CONSUMER_KEY and IBKR_PRIVATE_KEY.'
+            message: 'Interactive Brokers API credentials not configured. Please add IBKR_CLIENT_ID for OAuth 2.0 or IBKR_CONSUMER_KEY and IBKR_PRIVATE_KEY for OAuth 1.0a.'
           });
         }
-        
-        const adapter = new IBKRAdapter({
-          consumerKey,
-          privateKey,
-          realm,
-          redirectUri: input.redirectUri,
-          isPaper: input.isPaper
-        });
-        
-        // Get request token for OAuth1
-        const requestTokenResult = await adapter.getRequestToken();
-        
-        // Create OAuth state with request token
-        const oauthState = await createOAuthState(
-          String(ctx.user.id),
-          BrokerType.INTERACTIVE_BROKERS,
-          input.isPaper,
-          undefined,
-          requestTokenResult.token,
-          requestTokenResult.tokenSecret
-        );
-        
-        const authUrl = adapter.getAuthorizationUrl(oauthState.state, input.isPaper);
-        
-        return {
-          authUrl,
-          state: oauthState.state
-        };
       }),
 
     // Handle OAuth callback for Alpaca
@@ -3612,11 +3798,13 @@ export const appRouter = router({
         };
       }),
 
-    // Handle OAuth callback for Interactive Brokers
+    // Handle OAuth callback for Interactive Brokers (OAuth 2.0)
     handleIBKRCallback: protectedProcedure
       .input(z.object({
-        oauthToken: z.string(),
-        oauthVerifier: z.string(),
+        // OAuth 2.0 uses code, OAuth 1.0a uses oauthToken/oauthVerifier
+        code: z.string().optional(),
+        oauthToken: z.string().optional(),
+        oauthVerifier: z.string().optional(),
         state: z.string()
       }))
       .mutation(async ({ ctx, input }) => {
@@ -3629,32 +3817,67 @@ export const appRouter = router({
           });
         }
         
-        if (!oauthState.requestToken || !oauthState.requestTokenSecret) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Missing request token for OAuth1 flow'
+        // Determine if this is OAuth 2.0 or OAuth 1.0a based on the callback parameters
+        const isOAuth2 = !!input.code;
+        
+        let tokens;
+        let adapter: IBKRAdapter;
+        
+        if (isOAuth2) {
+          // OAuth 2.0 flow
+          const clientId = process.env.IBKR_CLIENT_ID!;
+          const clientSecret = process.env.IBKR_CLIENT_SECRET;
+          const privateKey = process.env.IBKR_PRIVATE_KEY;
+          const redirectUri = process.env.IBKR_REDIRECT_URI || `${process.env.VITE_APP_URL || ''}/broker/ibkr/callback`;
+          
+          adapter = new IBKRAdapter({
+            clientId,
+            clientSecret,
+            privateKey,
+            redirectUri,
+            isPaper: oauthState.isPaper,
+            authMethod: 'oauth2'
           });
+          
+          // Exchange code for tokens
+          tokens = await adapter.handleOAuthCallback(input.code!, input.state);
+        } else {
+          // OAuth 1.0a flow (legacy)
+          if (!oauthState.requestToken || !oauthState.requestTokenSecret) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Missing request token for OAuth1 flow'
+            });
+          }
+          
+          if (!input.oauthVerifier) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Missing OAuth verifier for OAuth1 flow'
+            });
+          }
+          
+          const consumerKey = process.env.IBKR_CONSUMER_KEY!;
+          const privateKey = process.env.IBKR_PRIVATE_KEY!;
+          const realm = process.env.IBKR_REALM || 'limited_poa';
+          const redirectUri = process.env.IBKR_REDIRECT_URI || `${process.env.VITE_APP_URL || ''}/broker/ibkr/callback`;
+          
+          adapter = new IBKRAdapter({
+            consumerKey,
+            privateKey,
+            realm,
+            redirectUri,
+            isPaper: oauthState.isPaper,
+            authMethod: 'oauth1'
+          });
+          
+          // Exchange verifier for access token
+          tokens = await adapter.handleOAuthCallback(
+            input.oauthVerifier,
+            oauthState.requestToken!,
+            input.oauthVerifier
+          );
         }
-        
-        const consumerKey = process.env.IBKR_CONSUMER_KEY!;
-        const privateKey = process.env.IBKR_PRIVATE_KEY!;
-        const realm = process.env.IBKR_REALM || 'limited_poa';
-        const redirectUri = process.env.IBKR_REDIRECT_URI || `${process.env.VITE_APP_URL || ''}/broker/ibkr/callback`;
-        
-        const adapter = new IBKRAdapter({
-          consumerKey,
-          privateKey,
-          realm,
-          redirectUri,
-          isPaper: oauthState.isPaper
-        });
-        
-        // Exchange verifier for access token using handleOAuthCallback
-        const tokens = await adapter.handleOAuthCallback(
-          input.oauthVerifier,
-          oauthState.requestToken!,
-          oauthState.requestTokenSecret
-        );
         
         // Initialize adapter with tokens
         await adapter.initialize({
@@ -4035,7 +4258,7 @@ export const appRouter = router({
     // Verify broker credentials (for wizard)
     verifyCredentials: protectedProcedure
       .input(z.object({
-        brokerType: z.enum(['alpaca', 'interactive_brokers', 'binance', 'coinbase']),
+        brokerType: z.enum(['alpaca', 'interactive_brokers', 'binance', 'coinbase', 'schwab']),
         apiKey: z.string(),
         apiSecret: z.string(),
       }))
@@ -4046,6 +4269,7 @@ export const appRouter = router({
           interactive_brokers: { key: /^[A-Za-z0-9_-]{10,50}$/, secret: /^[A-Za-z0-9_-]{20,100}$/ },
           binance: { key: /^[A-Za-z0-9]{64}$/, secret: /^[A-Za-z0-9]{64}$/ },
           coinbase: { key: /^[a-z0-9-]{36}$/, secret: /^[A-Za-z0-9+/=]{88}$/ },
+          schwab: { key: /^[A-Za-z0-9_-]{10,50}$/, secret: /^[A-Za-z0-9_-]{20,100}$/ },
         };
         
         const validation = formatValidation[input.brokerType];
@@ -4066,10 +4290,17 @@ export const appRouter = router({
         
         // For demo purposes, simulate verification
         // In production, this would actually test the credentials with the broker API
+        const brokerNames: Record<string, string> = {
+          alpaca: 'Alpaca',
+          interactive_brokers: 'IB',
+          binance: 'Binance',
+          coinbase: 'Coinbase',
+          schwab: 'Schwab'
+        };
         const mockAccountInfo = {
           accountId: `${input.brokerType.toUpperCase()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
-          accountName: `${input.brokerType === 'alpaca' ? 'Alpaca' : input.brokerType === 'interactive_brokers' ? 'IB' : input.brokerType === 'binance' ? 'Binance' : 'Coinbase'} Account`,
-          balance: input.brokerType === 'alpaca' || input.brokerType === 'interactive_brokers' ? 100000 : 10000,
+          accountName: `${brokerNames[input.brokerType] || input.brokerType} Account`,
+          balance: input.brokerType === 'alpaca' || input.brokerType === 'interactive_brokers' || input.brokerType === 'schwab' ? 100000 : 10000,
           currency: input.brokerType === 'binance' || input.brokerType === 'coinbase' ? 'USDT' : 'USD',
           isPaper: input.brokerType === 'alpaca' || input.brokerType === 'interactive_brokers',
         };
@@ -4083,7 +4314,7 @@ export const appRouter = router({
     // Connect broker with API credentials (for wizard)
     connect: protectedProcedure
       .input(z.object({
-        brokerType: z.enum(['alpaca', 'interactive_brokers', 'binance', 'coinbase']),
+        brokerType: z.enum(['alpaca', 'interactive_brokers', 'binance', 'coinbase', 'schwab']),
         apiKey: z.string(),
         apiSecret: z.string(),
         accountName: z.string(),
@@ -4101,9 +4332,14 @@ export const appRouter = router({
         // 3. Set up auto-sync if enabled
         
         // Create broker connection with correct function signature
-        const brokerTypeEnum = input.brokerType === 'alpaca' ? BrokerType.ALPACA : 
-                              input.brokerType === 'interactive_brokers' ? BrokerType.INTERACTIVE_BROKERS :
-                              BrokerType.ALPACA; // Default for crypto brokers
+        const brokerTypeMap: Record<string, BrokerType> = {
+          alpaca: BrokerType.ALPACA,
+          interactive_brokers: BrokerType.INTERACTIVE_BROKERS,
+          binance: BrokerType.BINANCE,
+          coinbase: BrokerType.COINBASE,
+          schwab: BrokerType.SCHWAB,
+        };
+        const brokerTypeEnum = brokerTypeMap[input.brokerType] || BrokerType.ALPACA;
         
         const connection = await createBrokerConnection(
           String(ctx.user.id),
@@ -5539,7 +5775,2334 @@ export const appRouter = router({
           mimeType: 'text/html',
         };
       }),
+
+    // Agent Communication Hub - Real-time agent discussions
+    startAgentDiscussion: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        assetType: z.enum(['stock', 'crypto', 'forex', 'commodity']),
+        topic: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { startDiscussion } = await import('./services/ai-agents/AgentCommunicationHub');
+        return startDiscussion(input.symbol, input.assetType, input.topic);
+      }),
+
+    runAgentDebate: protectedProcedure
+      .input(z.object({
+        threadId: z.string(),
+        rounds: z.number().min(1).max(5).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { generateDebate, getDiscussion } = await import('./services/ai-agents/AgentCommunicationHub');
+        const messages = await generateDebate(input.threadId, input.rounds ?? 1);
+        return { messages, thread: getDiscussion(input.threadId) };
+      }),
+
+    conductAgentVoting: protectedProcedure
+      .input(z.object({
+        threadId: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { conductVoting, getDiscussion } = await import('./services/ai-agents/AgentCommunicationHub');
+        const consensus = await conductVoting(input.threadId);
+        return { consensus, thread: getDiscussion(input.threadId) };
+      }),
+
+    getDiscussionThread: protectedProcedure
+      .input(z.object({
+        threadId: z.string(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getDiscussion } = await import('./services/ai-agents/AgentCommunicationHub');
+        return getDiscussion(input.threadId);
+      }),
+
+    // Market Regime Auto-Adaptation
+    getRegimeAdaptationConfig: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getUserConfig } = await import('./services/ai-agents/MarketRegimeAutoAdaptation');
+        return getUserConfig(ctx.user.openId);
+      }),
+
+    updateRegimeAdaptationConfig: protectedProcedure
+      .input(z.object({
+        enabled: z.boolean().optional(),
+        sensitivity: z.enum(['low', 'medium', 'high']).optional(),
+        minConfidenceThreshold: z.number().min(0).max(100).optional(),
+        cooldownPeriodMs: z.number().min(0).optional(),
+        maxWeightChange: z.number().min(0).max(1).optional(),
+        notifyOnChange: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { updateUserConfig } = await import('./services/ai-agents/MarketRegimeAutoAdaptation');
+        return updateUserConfig(ctx.user.openId, input);
+      }),
+
+    detectMarketRegime: protectedProcedure
+      .input(z.object({
+        prices: z.array(z.number()),
+        volumes: z.array(z.number()),
+        highs: z.array(z.number()),
+        lows: z.array(z.number()),
+        symbol: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { detectRegime } = await import('./services/ai-agents/MarketRegimeAutoAdaptation');
+        return detectRegime(input);
+      }),
+
+    autoAdaptWeights: protectedProcedure
+      .input(z.object({
+        currentWeights: z.object({
+          technical: z.number(),
+          fundamental: z.number(),
+          sentiment: z.number(),
+          risk: z.number(),
+          regime: z.number(),
+          execution: z.number(),
+        }),
+        marketData: z.object({
+          prices: z.array(z.number()),
+          volumes: z.array(z.number()),
+          highs: z.array(z.number()),
+          lows: z.array(z.number()),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { autoAdaptWeights } = await import('./services/ai-agents/MarketRegimeAutoAdaptation');
+        return autoAdaptWeights(ctx.user.openId, input.currentWeights, input.marketData);
+      }),
+
+    getRegimeHistory: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getRegimeHistory } = await import('./services/ai-agents/MarketRegimeAutoAdaptation');
+        return getRegimeHistory();
+      }),
+
+    getRegimeStatistics: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getRegimeStatistics } = await import('./services/ai-agents/MarketRegimeAutoAdaptation');
+        return getRegimeStatistics();
+      }),
+
+    getRegimePresets: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getAllRegimePresets } = await import('./services/ai-agents/MarketRegimeAutoAdaptation');
+        return getAllRegimePresets();
+      }),
+
+    enhanceRegimeAnalysis: protectedProcedure
+      .input(z.object({
+        regime: z.string(),
+        indicators: z.object({
+          volatility: z.number(),
+          trend: z.number(),
+          momentum: z.number(),
+          sentiment: z.number(),
+          volume: z.number(),
+        }),
+        symbol: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { enhanceRegimeAnalysis } = await import('./services/ai-agents/MarketRegimeAutoAdaptation');
+        return enhanceRegimeAnalysis(input.regime as any, input.indicators, input.symbol);
+      }),
+
+    // Multi-Asset Correlation Engine
+    getCorrelationAssets: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getDefaultAssets } = await import('./services/ai-agents/MultiAssetCorrelationEngine');
+        return getDefaultAssets();
+      }),
+
+    calculateCorrelationMatrix: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+        period: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { calculateCorrelationMatrix, generateSamplePriceData, getDefaultAssets } = await import('./services/ai-agents/MultiAssetCorrelationEngine');
+        const allAssets = getDefaultAssets();
+        const selectedAssets = allAssets.filter(a => input.symbols.includes(a.symbol));
+        const priceData = generateSamplePriceData(input.symbols);
+        return calculateCorrelationMatrix(selectedAssets, priceData, input.period || '1Y');
+      }),
+
+    analyzeCrossAssetCorrelations: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { analyzeCrossAssetCorrelations, generateSamplePriceData, getDefaultAssets } = await import('./services/ai-agents/MultiAssetCorrelationEngine');
+        const allAssets = getDefaultAssets();
+        const selectedAssets = allAssets.filter(a => input.symbols.includes(a.symbol));
+        const priceData = generateSamplePriceData(input.symbols);
+        return analyzeCrossAssetCorrelations(selectedAssets, priceData);
+      }),
+
+    findUncorrelatedAssets: protectedProcedure
+      .input(z.object({
+        currentSymbols: z.array(z.string()),
+        maxCorrelation: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { findUncorrelatedAssets, generateSamplePriceData, getDefaultAssets } = await import('./services/ai-agents/MultiAssetCorrelationEngine');
+        const allAssets = getDefaultAssets();
+        const currentAssets = allAssets.filter(a => input.currentSymbols.includes(a.symbol));
+        const candidateAssets = allAssets.filter(a => !input.currentSymbols.includes(a.symbol));
+        const priceData = generateSamplePriceData(allAssets.map(a => a.symbol));
+        return findUncorrelatedAssets(currentAssets, candidateAssets, priceData, input.maxCorrelation || 0.3);
+      }),
+
+    calculateRollingCorrelation: protectedProcedure
+      .input(z.object({
+        symbol1: z.string(),
+        symbol2: z.string(),
+        windowSize: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { calculateRollingCorrelation, generateSamplePriceData, getDefaultAssets } = await import('./services/ai-agents/MultiAssetCorrelationEngine');
+        const allAssets = getDefaultAssets();
+        const asset1 = allAssets.find(a => a.symbol === input.symbol1);
+        const asset2 = allAssets.find(a => a.symbol === input.symbol2);
+        if (!asset1 || !asset2) return null;
+        const priceData = generateSamplePriceData([input.symbol1, input.symbol2]);
+        const prices1 = priceData.get(input.symbol1) || [];
+        const prices2 = priceData.get(input.symbol2) || [];
+        return calculateRollingCorrelation(asset1, prices1, asset2, prices2, input.windowSize || 30);
+      }),
+
+    // Social Sentiment Integration
+    getSymbolSentiment: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getSymbolSentiment } = await import('./services/ai-agents/SocialSentimentIntegration');
+        return getSymbolSentiment(input.symbol);
+      }),
+
+    getTrendingSentiment: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getTrendingSymbols } = await import('./services/ai-agents/SocialSentimentIntegration');
+        return getTrendingSymbols(10);
+      }),
+
+    getSentimentAlerts: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getSymbolSentiment, generateSentimentAlerts } = await import('./services/ai-agents/SocialSentimentIntegration');
+        const currentSentiment = getSymbolSentiment(input.symbol);
+        return generateSentimentAlerts(input.symbol, null, currentSentiment);
+      }),
+
+    getSentimentHeatmap: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getSentimentHeatmap } = await import('./services/ai-agents/SocialSentimentIntegration');
+        return getSentimentHeatmap();
+      }),
+
+    analyzeSentimentText: protectedProcedure
+      .input(z.object({
+        text: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { analyzeSentimentText } = await import('./services/ai-agents/SocialSentimentIntegration');
+        return analyzeSentimentText(input.text);
+      }),
+
+    // Portfolio Stress Testing
+    getStressScenarios: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getAvailableScenarios } = await import('./services/ai-agents/PortfolioStressTesting');
+        return getAvailableScenarios();
+      }),
+
+    runMonteCarloStress: protectedProcedure
+      .input(z.object({
+        simulations: z.number().optional(),
+        timeHorizon: z.number().optional(),
+        confidenceLevel: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { runMonteCarloSimulation, getSamplePortfolio } = await import('./services/ai-agents/PortfolioStressTesting');
+        const portfolio = getSamplePortfolio();
+        return runMonteCarloSimulation(portfolio, {
+          simulations: input.simulations || 1000,
+          timeHorizon: input.timeHorizon || 30,
+          confidenceLevel: input.confidenceLevel || 0.95,
+          volatilityMultiplier: 1.0,
+        });
+      }),
+
+    runHistoricalStress: protectedProcedure
+      .input(z.object({
+        scenario: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { runHistoricalScenario, getSamplePortfolio } = await import('./services/ai-agents/PortfolioStressTesting');
+        const portfolio = getSamplePortfolio();
+        return runHistoricalScenario(portfolio, input.scenario as any);
+      }),
+
+    runSensitivityAnalysis: protectedProcedure
+      .input(z.object({
+        factors: z.array(z.string()),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { runSensitivityAnalysis, getSamplePortfolio } = await import('./services/ai-agents/PortfolioStressTesting');
+        const portfolio = getSamplePortfolio();
+        return runSensitivityAnalysis(portfolio, input.factors);
+      }),
+
+    calculatePortfolioVaR: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { calculateVaR, getSamplePortfolio } = await import('./services/ai-agents/PortfolioStressTesting');
+        const portfolio = getSamplePortfolio();
+        return calculateVaR(portfolio, 0.95, 1);
+      }),
+
+    // Agent Performance Leaderboard
+    getAgentLeaderboard: protectedProcedure
+      .input(z.object({
+        timeFrame: z.string(),
+        marketCondition: z.string().optional(),
+        agentType: z.string().optional(),
+        minSignals: z.number().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getLeaderboard } = await import('./services/ai-agents/AgentPerformanceLeaderboard');
+        return getLeaderboard({
+          timeFrame: input.timeFrame as any,
+          marketCondition: input.marketCondition as any,
+          agentType: input.agentType as any,
+          minSignals: input.minSignals,
+        });
+      }),
+
+    getLeaderboardStats: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getLeaderboardStats } = await import('./services/ai-agents/AgentPerformanceLeaderboard');
+        return getLeaderboardStats();
+      }),
+
+    getMarketConditions: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getMarketConditions } = await import('./services/ai-agents/AgentPerformanceLeaderboard');
+        return getMarketConditions();
+      }),
+
+    getAgentTypes: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getAgentTypes } = await import('./services/ai-agents/AgentPerformanceLeaderboard');
+        return getAgentTypes();
+      }),
+
+    getAllBadges: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getAllBadges } = await import('./services/ai-agents/AgentPerformanceLeaderboard');
+        return getAllBadges();
+      }),
+
+    getAgentDetails: protectedProcedure
+      .input(z.object({
+        agentId: z.string(),
+        timeFrame: z.string().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getAgentDetails } = await import('./services/ai-agents/AgentPerformanceLeaderboard');
+        return getAgentDetails(input.agentId, (input.timeFrame || '1m') as any);
+      }),
+
+    compareAgents: protectedProcedure
+      .input(z.object({
+        agentIds: z.array(z.string()),
+        timeFrame: z.string().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { compareAgents } = await import('./services/ai-agents/AgentPerformanceLeaderboard');
+        return compareAgents(input.agentIds, (input.timeFrame || '1m') as any);
+      }),
+
+    // ==================== AUTOMATED STRATEGY GENERATION ====================
+    
+    // Get strategy questionnaire
+    getStrategyQuestionnaire: publicProcedure
+      .query(async () => {
+        const { getQuestionnaire } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        return getQuestionnaire();
+      }),
+
+    // Get strategy templates
+    getStrategyTemplates: publicProcedure
+      .query(async () => {
+        const { getStrategyTemplates } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        return getStrategyTemplates();
+      }),
+
+    // Create risk profile from questionnaire responses
+    createRiskProfile: protectedProcedure
+      .input(z.object({
+        responses: z.array(z.object({
+          questionId: z.string(),
+          answer: z.union([z.string(), z.number(), z.array(z.string())]),
+        })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        return createRiskProfile(ctx.user.openId, input.responses);
+      }),
+
+    // Generate strategy based on risk profile
+    generateStrategy: protectedProcedure
+      .input(z.object({
+        profileId: z.string(),
+        preferredType: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { createRiskProfile, generateStrategy, getQuestionnaire } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        // For now, create a default profile if profileId doesn't exist
+        const defaultResponses = [
+          { questionId: 'q1_risk_tolerance', answer: 'hold' },
+          { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+          { questionId: 'q3_trading_style', answer: 'swing_trading' },
+          { questionId: 'q4_max_drawdown', answer: 20 },
+          { questionId: 'q5_target_return', answer: 15 },
+          { questionId: 'q6_asset_classes', answer: ['stocks'] },
+          { questionId: 'q7_capital', answer: 10000 },
+          { questionId: 'q8_experience', answer: 'intermediate' },
+          { questionId: 'q9_time_availability', answer: 'part_time' },
+          { questionId: 'q10_emotional_tolerance', answer: 5 },
+        ];
+        const profile = createRiskProfile(ctx.user.openId, defaultResponses);
+        return generateStrategy(profile, input.preferredType as any);
+      }),
+
+    // Optimize existing strategy
+    optimizeStrategy: protectedProcedure
+      .input(z.object({
+        strategyId: z.string(),
+        optimizationGoal: z.enum(['win_rate', 'risk_reward', 'sharpe', 'drawdown']),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { optimizeStrategy, generateStrategy, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        // Generate a sample strategy to optimize
+        const defaultResponses = [
+          { questionId: 'q1_risk_tolerance', answer: 'hold' },
+          { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+          { questionId: 'q3_trading_style', answer: 'swing_trading' },
+          { questionId: 'q4_max_drawdown', answer: 20 },
+          { questionId: 'q5_target_return', answer: 15 },
+          { questionId: 'q6_asset_classes', answer: ['stocks'] },
+          { questionId: 'q7_capital', answer: 10000 },
+          { questionId: 'q8_experience', answer: 'intermediate' },
+          { questionId: 'q9_time_availability', answer: 'part_time' },
+          { questionId: 'q10_emotional_tolerance', answer: 5 },
+        ];
+        const profile = createRiskProfile(ctx.user.openId, defaultResponses);
+        const strategy = generateStrategy(profile);
+        return optimizeStrategy(strategy, input.optimizationGoal);
+      }),
+
+    // Get suitable templates for a risk profile
+    getSuitableTemplates: protectedProcedure
+      .input(z.object({
+        riskTolerance: z.enum(['conservative', 'moderate', 'aggressive', 'very_aggressive']),
+        preferredAssets: z.array(z.string()),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { getSuitableTemplates, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        const mockProfile = {
+          id: 'temp',
+          userId: ctx.user.openId,
+          riskTolerance: input.riskTolerance,
+          investmentHorizon: 'medium_term' as const,
+          tradingStyle: 'swing_trading' as const,
+          maxDrawdownTolerance: 20,
+          targetAnnualReturn: 15,
+          preferredAssetClasses: input.preferredAssets as any[],
+          capitalAllocation: 10000,
+          maxPositionSize: 10,
+          maxOpenPositions: 10,
+          tradingFrequency: 'medium' as const,
+          experienceLevel: 'intermediate' as const,
+          emotionalTolerance: 5,
+          timeAvailability: 'part_time' as const,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        return getSuitableTemplates(mockProfile);
+      }),
+
+    // Generate multiple strategy variations
+    generateStrategyVariations: protectedProcedure
+      .input(z.object({
+        count: z.number().min(1).max(5).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { generateStrategyVariations, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        const defaultResponses = [
+          { questionId: 'q1_risk_tolerance', answer: 'hold' },
+          { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+          { questionId: 'q3_trading_style', answer: 'swing_trading' },
+          { questionId: 'q4_max_drawdown', answer: 20 },
+          { questionId: 'q5_target_return', answer: 15 },
+          { questionId: 'q6_asset_classes', answer: ['stocks', 'crypto'] },
+          { questionId: 'q7_capital', answer: 10000 },
+          { questionId: 'q8_experience', answer: 'intermediate' },
+          { questionId: 'q9_time_availability', answer: 'part_time' },
+          { questionId: 'q10_emotional_tolerance', answer: 5 },
+        ];
+        const profile = createRiskProfile(ctx.user.openId, defaultResponses);
+        return generateStrategyVariations(profile, input.count || 3);
+      }),
+
+    // Compare multiple strategies
+    compareStrategies: protectedProcedure
+      .input(z.object({
+        strategyIds: z.array(z.string()),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { compareStrategies, generateStrategyVariations, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        const defaultResponses = [
+          { questionId: 'q1_risk_tolerance', answer: 'hold' },
+          { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+          { questionId: 'q3_trading_style', answer: 'swing_trading' },
+          { questionId: 'q4_max_drawdown', answer: 20 },
+          { questionId: 'q5_target_return', answer: 15 },
+          { questionId: 'q6_asset_classes', answer: ['stocks', 'crypto'] },
+          { questionId: 'q7_capital', answer: 10000 },
+          { questionId: 'q8_experience', answer: 'intermediate' },
+          { questionId: 'q9_time_availability', answer: 'part_time' },
+          { questionId: 'q10_emotional_tolerance', answer: 5 },
+        ];
+        const profile = createRiskProfile(ctx.user.openId, defaultResponses);
+        const strategies = generateStrategyVariations(profile, 3);
+        return compareStrategies(strategies);
+      }),
+
+    // Validate a strategy
+    validateStrategy: protectedProcedure
+      .input(z.object({
+        strategyId: z.string(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { validateStrategy, generateStrategy, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        const defaultResponses = [
+          { questionId: 'q1_risk_tolerance', answer: 'hold' },
+          { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+          { questionId: 'q3_trading_style', answer: 'swing_trading' },
+          { questionId: 'q4_max_drawdown', answer: 20 },
+          { questionId: 'q5_target_return', answer: 15 },
+          { questionId: 'q6_asset_classes', answer: ['stocks'] },
+          { questionId: 'q7_capital', answer: 10000 },
+          { questionId: 'q8_experience', answer: 'intermediate' },
+          { questionId: 'q9_time_availability', answer: 'part_time' },
+          { questionId: 'q10_emotional_tolerance', answer: 5 },
+        ];
+        const profile = createRiskProfile(ctx.user.openId, defaultResponses);
+        const strategy = generateStrategy(profile);
+        return validateStrategy(strategy);
+      }),
+
+    // Export strategy as JSON
+    exportStrategy: protectedProcedure
+      .input(z.object({
+        strategyId: z.string(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { exportStrategy, generateStrategy, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        const defaultResponses = [
+          { questionId: 'q1_risk_tolerance', answer: 'hold' },
+          { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+          { questionId: 'q3_trading_style', answer: 'swing_trading' },
+          { questionId: 'q4_max_drawdown', answer: 20 },
+          { questionId: 'q5_target_return', answer: 15 },
+          { questionId: 'q6_asset_classes', answer: ['stocks'] },
+          { questionId: 'q7_capital', answer: 10000 },
+          { questionId: 'q8_experience', answer: 'intermediate' },
+          { questionId: 'q9_time_availability', answer: 'part_time' },
+          { questionId: 'q10_emotional_tolerance', answer: 5 },
+        ];
+        const profile = createRiskProfile(ctx.user.openId, defaultResponses);
+        const strategy = generateStrategy(profile);
+        return { json: exportStrategy(strategy), filename: `${strategy.name.replace(/\s+/g, '_')}.json` };
+      }),
+
+    // Strategy Backtesting Integration
+    runStrategyBacktest: protectedProcedure
+      .input(z.object({
+        strategyId: z.string(),
+        symbol: z.string(),
+        startDate: z.number(),
+        endDate: z.number(),
+        initialCapital: z.number().default(100000),
+        commissionRate: z.number().default(0.001),
+      }))
+      .mutation(async ({ input }) => {
+        const { runBacktest } = await import('./services/ai-agents/StrategyBacktestingIntegration');
+        const { generateStrategy, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        // Create a default risk profile and generate strategy
+        const defaultResponses = [
+          { questionId: 'q1_risk_tolerance', answer: 3 },
+          { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+          { questionId: 'q3_loss_reaction', answer: 'hold' },
+          { questionId: 'q4_income_stability', answer: 'stable' },
+          { questionId: 'q5_investment_goal', answer: 'growth' },
+          { questionId: 'q6_market_knowledge', answer: 'intermediate' },
+          { questionId: 'q7_portfolio_allocation', answer: 'balanced' },
+          { questionId: 'q8_experience', answer: 'intermediate' },
+          { questionId: 'q9_time_availability', answer: 'part_time' },
+          { questionId: 'q10_emotional_tolerance', answer: 5 },
+        ];
+        const profile = createRiskProfile('backtest-user', defaultResponses);
+        const strategy = generateStrategy(profile);
+        return runBacktest(strategy, {
+          strategyId: input.strategyId,
+          symbol: input.symbol,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          initialCapital: input.initialCapital,
+          commission: input.commissionRate,
+          slippage: 0.001,
+          useMarginTrading: false,
+          maxLeverage: 1,
+        });
+      }),
+
+    getBacktestSummary: protectedProcedure
+      .input(z.object({ backtestId: z.string() }))
+      .query(async ({ input }) => {
+        const { runBacktest, getBacktestSummary } = await import('./services/ai-agents/StrategyBacktestingIntegration');
+        const { generateStrategy, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        const defaultResponses = [
+          { questionId: 'q1_risk_tolerance', answer: 3 },
+          { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+          { questionId: 'q3_loss_reaction', answer: 'hold' },
+          { questionId: 'q4_income_stability', answer: 'stable' },
+          { questionId: 'q5_investment_goal', answer: 'growth' },
+          { questionId: 'q6_market_knowledge', answer: 'intermediate' },
+          { questionId: 'q7_portfolio_allocation', answer: 'balanced' },
+          { questionId: 'q8_experience', answer: 'intermediate' },
+          { questionId: 'q9_time_availability', answer: 'part_time' },
+          { questionId: 'q10_emotional_tolerance', answer: 5 },
+        ];
+        const profile = createRiskProfile('backtest-user', defaultResponses);
+        const strategy = generateStrategy(profile);
+        const mockResult = runBacktest(strategy, {
+          strategyId: input.backtestId,
+          symbol: 'AAPL',
+          startDate: Date.now() - 365 * 24 * 60 * 60 * 1000,
+          endDate: Date.now(),
+          initialCapital: 100000,
+          commission: 0.001,
+          slippage: 0.001,
+          useMarginTrading: false,
+          maxLeverage: 1,
+        });
+        return getBacktestSummary(mockResult);
+      }),
+
+    compareBacktestResults: protectedProcedure
+      .input(z.object({ backtestIds: z.array(z.string()) }))
+      .query(async ({ input }) => {
+        const { runBacktest, compareBacktestResults } = await import('./services/ai-agents/StrategyBacktestingIntegration');
+        const { generateStrategy, createRiskProfile } = await import('./services/ai-agents/AutomatedStrategyGeneration');
+        // Run backtests for comparison
+        const results = input.backtestIds.map((id, idx) => {
+          const defaultResponses = [
+            { questionId: 'q1_risk_tolerance', answer: 1 + idx },
+            { questionId: 'q2_investment_horizon', answer: 'medium_term' },
+            { questionId: 'q3_loss_reaction', answer: 'hold' },
+            { questionId: 'q4_income_stability', answer: 'stable' },
+            { questionId: 'q5_investment_goal', answer: 'growth' },
+            { questionId: 'q6_market_knowledge', answer: 'intermediate' },
+            { questionId: 'q7_portfolio_allocation', answer: 'balanced' },
+            { questionId: 'q8_experience', answer: 'intermediate' },
+            { questionId: 'q9_time_availability', answer: 'part_time' },
+            { questionId: 'q10_emotional_tolerance', answer: 5 },
+          ];
+          const profile = createRiskProfile(`backtest-${id}`, defaultResponses);
+          const strategy = generateStrategy(profile);
+          return runBacktest(strategy, {
+            strategyId: id,
+            symbol: 'AAPL',
+            startDate: Date.now() - 365 * 24 * 60 * 60 * 1000,
+            endDate: Date.now(),
+            initialCapital: 100000,
+            commission: 0.001,
+            slippage: 0.001,
+            useMarginTrading: false,
+            maxLeverage: 1,
+          });
+        });
+        return compareBacktestResults(results);
+      }),
+
+    // Strategy Alerts
+    getAlerts: protectedProcedure
+      .input(z.object({
+        status: z.enum(['active', 'triggered', 'expired', 'cancelled']).optional(),
+        type: z.string().optional(),
+        symbol: z.string().optional(),
+      }).optional())
+      .query(async ({ ctx, input }) => {
+        const { getUserAlerts } = await import('./services/ai-agents/StrategyAlerts');
+        return getUserAlerts(ctx.user.openId, input as any);
+      }),
+
+    getAlertTemplates: publicProcedure
+      .input(z.object({ category: z.enum(['entry', 'exit', 'risk', 'opportunity']).optional() }).optional())
+      .query(async ({ input }) => {
+        const { getAlertTemplates } = await import('./services/ai-agents/StrategyAlerts');
+        return getAlertTemplates(input?.category);
+      }),
+
+    getAlertSummary: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getAlertSummary } = await import('./services/ai-agents/StrategyAlerts');
+        return getAlertSummary(ctx.user.openId);
+      }),
+
+    getRecentTriggers: protectedProcedure
+      .input(z.object({ limit: z.number().default(20) }))
+      .query(async ({ ctx, input }) => {
+        const { getRecentTriggers } = await import('./services/ai-agents/StrategyAlerts');
+        return getRecentTriggers(ctx.user.openId, input.limit);
+      }),
+
+    createAlert: protectedProcedure
+      .input(z.object({
+        strategyId: z.string(),
+        strategyName: z.string(),
+        symbol: z.string(),
+        type: z.enum(['entry_signal', 'exit_signal', 'price_target', 'stop_loss', 'indicator_crossover', 'volume_spike', 'volatility_alert', 'custom']),
+        priority: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
+        conditions: z.array(z.object({
+          type: z.enum(['price', 'indicator', 'volume', 'volatility', 'time', 'custom']),
+          indicator: z.string().optional(),
+          operator: z.enum(['above', 'below', 'crosses_above', 'crosses_below', 'equals', 'between', 'change_percent']),
+          value: z.union([z.number(), z.tuple([z.number(), z.number()])]),
+        })),
+        conditionLogic: z.enum(['all', 'any']).default('all'),
+        message: z.string().optional(),
+        notificationChannels: z.array(z.string()).default(['in_app']),
+        cooldownMinutes: z.number().default(30),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { createAlert } = await import('./services/ai-agents/StrategyAlerts');
+        return createAlert(ctx.user.openId, input.strategyId, input.strategyName, input.symbol, {
+          type: input.type,
+          priority: input.priority,
+          conditions: input.conditions,
+          conditionLogic: input.conditionLogic,
+          message: input.message,
+          notificationChannels: input.notificationChannels as any,
+          cooldownMinutes: input.cooldownMinutes,
+        });
+      }),
+
+    createAlertFromTemplate: protectedProcedure
+      .input(z.object({
+        templateId: z.string(),
+        strategyId: z.string(),
+        strategyName: z.string(),
+        symbol: z.string(),
+        priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+        notificationChannels: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { createAlertFromTemplate } = await import('./services/ai-agents/StrategyAlerts');
+        return createAlertFromTemplate(
+          ctx.user.openId,
+          input.strategyId,
+          input.strategyName,
+          input.symbol,
+          input.templateId,
+          {
+            priority: input.priority,
+            notificationChannels: input.notificationChannels as any,
+          }
+        );
+      }),
+
+    cancelAlert: protectedProcedure
+      .input(z.object({ alertId: z.string() }))
+      .mutation(async ({ input }) => {
+        const { cancelAlert } = await import('./services/ai-agents/StrategyAlerts');
+        return cancelAlert(input.alertId);
+      }),
+
+    deleteAlert: protectedProcedure
+      .input(z.object({ alertId: z.string() }))
+      .mutation(async ({ input }) => {
+        const { deleteAlert } = await import('./services/ai-agents/StrategyAlerts');
+        return deleteAlert(input.alertId);
+      }),
+
+    acknowledgeTrigger: protectedProcedure
+      .input(z.object({ triggerId: z.string() }))
+      .mutation(async ({ input }) => {
+        const { acknowledgeTrigger } = await import('./services/ai-agents/StrategyAlerts');
+        return acknowledgeTrigger(input.triggerId);
+      }),
+
+    processAlerts: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        price: z.number(),
+        volume: z.number(),
+        change: z.number(),
+        changePercent: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        const { processAlerts, simulateMarketSnapshot } = await import('./services/ai-agents/StrategyAlerts');
+        const snapshot = {
+          ...simulateMarketSnapshot(input.symbol),
+          price: input.price,
+          volume: input.volume,
+          change: input.change,
+          changePercent: input.changePercent,
+        };
+        return processAlerts(input.symbol, snapshot);
+      }),
+  }),
+
+  // ==================== ALPACA BROKER INTEGRATION ====================
+  alpaca: router({
+    // Market Data - Real-time Quotes
+    getQuote: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        feed: z.enum(['iex', 'sip']).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getQuote(input.symbol);
+      }),
+
+    getQuotes: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+        feed: z.enum(['iex', 'sip']).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        const quotes = await Promise.all(input.symbols.map(s => adapter.getQuote(s)));
+        return Object.fromEntries(input.symbols.map((s, i) => [s, quotes[i]]));
+      }),
+
+    // Market Data - Historical Bars
+    getBars: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        timeframe: z.enum(['1Min', '5Min', '15Min', '30Min', '1Hour', '4Hour', '1Day', '1Week', '1Month']),
+        start: z.string().optional(),
+        end: z.string().optional(),
+        limit: z.number().max(10000).optional(),
+        feed: z.enum(['iex', 'sip']).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getBars({
+          symbol: input.symbol,
+          timeframe: input.timeframe as any,
+          start: input.start ? new Date(input.start) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          end: input.end ? new Date(input.end) : undefined,
+          limit: input.limit,
+        });
+      }),
+
+    getMultiBars: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+        timeframe: z.enum(['1Min', '5Min', '15Min', '30Min', '1Hour', '4Hour', '1Day', '1Week', '1Month']),
+        start: z.string().optional(),
+        end: z.string().optional(),
+        limit: z.number().max(10000).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        const results: Record<string, any[]> = {};
+        for (const symbol of input.symbols) {
+          results[symbol] = await adapter.getBars({
+            symbol,
+            timeframe: input.timeframe as any,
+            start: input.start ? new Date(input.start) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+            end: input.end ? new Date(input.end) : undefined,
+            limit: input.limit,
+          });
+        }
+        return results;
+      }),
+
+    // Market Data - Trades
+    getTrades: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        start: z.string().optional(),
+        end: z.string().optional(),
+        limit: z.number().max(10000).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getTrades(
+          input.symbol,
+          input.start ? new Date(input.start) : new Date(Date.now() - 24 * 60 * 60 * 1000),
+          input.end ? new Date(input.end) : undefined,
+          input.limit
+        );
+      }),
+
+    // Market Data - Snapshot
+    getSnapshot: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getSnapshot(input.symbol);
+      }),
+
+    getSnapshots: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getSnapshots(input.symbols);
+      }),
+
+    // Options Trading
+    getOptionsChain: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        expirationDate: z.string().optional(),
+        strikePrice: z.number().optional(),
+        optionType: z.enum(['call', 'put']).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getOptionsChain({
+          underlyingSymbol: input.symbol,
+          expirationDate: input.expirationDate ? new Date(input.expirationDate) : undefined,
+          strikePrice: input.strikePrice,
+          type: input.optionType as any,
+        });
+      }),
+
+    getOptionContract: protectedProcedure
+      .input(z.object({
+        contractId: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getOptionContract(input.contractId);
+      }),
+
+    // Crypto Trading
+    getCryptoQuote: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getCryptoQuote(input.symbol);
+      }),
+
+    getCryptoBars: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        timeframe: z.enum(['1Min', '5Min', '15Min', '30Min', '1Hour', '4Hour', '1Day', '1Week', '1Month']),
+        start: z.string().optional(),
+        end: z.string().optional(),
+        limit: z.number().max(10000).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getCryptoBars(input.symbol, input.timeframe, {
+          start: input.start,
+          end: input.end,
+          limit: input.limit,
+        });
+      }),
+
+    getCryptoTrades: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        start: z.string().optional(),
+        end: z.string().optional(),
+        limit: z.number().max(10000).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getCryptoTrades(input.symbol, {
+          start: input.start,
+          end: input.end,
+          limit: input.limit,
+        });
+      }),
+
+    getCryptoSnapshot: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getCryptoSnapshot(input.symbol);
+      }),
+
+    // News Feed
+    getNews: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()).optional(),
+        start: z.string().optional(),
+        end: z.string().optional(),
+        limit: z.number().max(50).optional(),
+        includeContent: z.boolean().optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getNews(input.symbols, input.limit);
+      }),
+
+    // AI-Powered News Sentiment Analysis
+    analyzeNewsSentiment: protectedProcedure
+      .input(z.object({
+        articles: z.array(z.object({
+          id: z.string(),
+          headline: z.string(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        const { analyzeNewsBatchSentiment } = await import('./services/newsSentimentAnalysis');
+        return analyzeNewsBatchSentiment(input.articles);
+      }),
+
+    // Quick keyword-based sentiment (no LLM, instant)
+    getQuickSentiment: publicProcedure
+      .input(z.object({
+        headline: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { analyzeKeywordSentiment } = await import('./services/newsSentimentAnalysis');
+        return analyzeKeywordSentiment(input.headline);
+      }),
+
+    // Sentiment Trend Data
+    getSentimentTrend: protectedProcedure
+      .input(z.object({
+        period: z.enum(['24h', '7d']),
+      }))
+      .query(async ({ input }) => {
+        const { getSentimentTrendWithFallback } = await import('./services/sentimentTrendService');
+        return getSentimentTrendWithFallback(input.period);
+      }),
+
+    // Record sentiment for trend tracking
+    recordSentimentForTrend: protectedProcedure
+      .input(z.object({
+        articles: z.array(z.object({
+          id: z.string(),
+          sentiment: z.enum(['bullish', 'bearish', 'neutral']),
+          timestamp: z.number().optional(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        const { recordSentimentBatch } = await import('./services/sentimentTrendService');
+        recordSentimentBatch(input.articles);
+        return { success: true, recorded: input.articles.length };
+      }),
+
+    // Trading - Orders
+    placeOrder: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        quantity: z.number(),
+        side: z.enum(['buy', 'sell']),
+        type: z.enum(['market', 'limit', 'stop', 'stop_limit', 'trailing_stop']),
+        timeInForce: z.enum(['day', 'gtc', 'opg', 'cls', 'ioc', 'fok']),
+        limitPrice: z.number().optional(),
+        stopPrice: z.number().optional(),
+        trailPercent: z.number().optional(),
+        trailPrice: z.number().optional(),
+        extendedHours: z.boolean().optional(),
+        clientOrderId: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.placeOrder({
+          symbol: input.symbol,
+          quantity: input.quantity,
+          side: input.side as any,
+          type: input.type as any,
+          timeInForce: input.timeInForce as any,
+          price: input.limitPrice,
+          stopPrice: input.stopPrice,
+          trailPercent: input.trailPercent,
+          extendedHours: input.extendedHours,
+          clientOrderId: input.clientOrderId,
+        });
+      }),
+
+    placeBracketOrder: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        quantity: z.number(),
+        side: z.enum(['buy', 'sell']),
+        type: z.enum(['market', 'limit']),
+        timeInForce: z.enum(['day', 'gtc']),
+        limitPrice: z.number().optional(),
+        takeProfitLimitPrice: z.number(),
+        stopLossStopPrice: z.number(),
+        stopLossLimitPrice: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.placeBracketOrder(input);
+      }),
+
+    placeOCOOrder: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        quantity: z.number(),
+        side: z.enum(['buy', 'sell']),
+        takeProfitLimitPrice: z.number(),
+        stopLossStopPrice: z.number(),
+        stopLossLimitPrice: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.placeOCOOrder(input);
+      }),
+
+    modifyOrder: protectedProcedure
+      .input(z.object({
+        orderId: z.string(),
+        quantity: z.number().optional(),
+        limitPrice: z.number().optional(),
+        stopPrice: z.number().optional(),
+        trailPercent: z.number().optional(),
+        timeInForce: z.enum(['day', 'gtc', 'opg', 'cls', 'ioc', 'fok']).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.modifyOrder({ orderId: input.orderId, quantity: input.quantity, price: input.limitPrice, stopPrice: input.stopPrice, trailPercent: input.trailPercent, timeInForce: input.timeInForce as any });
+      }),
+
+    cancelOrder: protectedProcedure
+      .input(z.object({
+        orderId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.cancelOrder(input.orderId);
+      }),
+
+    cancelAllOrders: protectedProcedure
+      .mutation(async () => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.cancelAllOrders();
+      }),
+
+    getOrder: protectedProcedure
+      .input(z.object({
+        orderId: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getOrder(input.orderId);
+      }),
+
+    getOrders: protectedProcedure
+      .input(z.object({
+        connectionId: z.string().optional(),
+        status: z.enum(['open', 'closed', 'all']).optional(),
+        limit: z.number().max(500).optional(),
+        after: z.string().optional(),
+        until: z.string().optional(),
+        direction: z.enum(['asc', 'desc']).optional(),
+        symbols: z.array(z.string()).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getOrders(input.status as any, input.limit, input.after ? new Date(input.after) : undefined);
+      }),
+
+    // Trading - Positions
+    getPosition: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getPosition(input.symbol);
+      }),
+
+    getPositions: protectedProcedure
+      .input(z.object({ connectionId: z.string().optional() }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getPositions();
+      }),
+
+    closePosition: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        quantity: z.number().optional(),
+        percentage: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.closePosition(input.symbol, input.quantity, input.percentage);
+      }),
+
+    closeAllPositions: protectedProcedure
+      .input(z.object({
+        cancelOrders: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.closeAllPositions();
+      }),
+
+    // Account
+    getAccount: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getAccount();
+      }),
+
+    getAccountBalance: protectedProcedure
+      .query(async () => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getAccountBalance();
+      }),
+
+    getPortfolioHistory: protectedProcedure
+      .input(z.object({
+        period: z.enum(['1D', '1W', '1M', '3M', '6M', '1A', 'all']).optional(),
+        timeframe: z.enum(['1Min', '5Min', '15Min', '1H', '1D']).optional(),
+        dateEnd: z.string().optional(),
+        extendedHours: z.boolean().optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getPortfolioHistory(input.period, input.timeframe);
+      }),
+
+    // Assets
+    getAsset: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getAsset(input.symbol);
+      }),
+
+    getAssets: protectedProcedure
+      .input(z.object({
+        status: z.enum(['active', 'inactive']).optional(),
+        assetClass: z.enum(['us_equity', 'crypto']).optional(),
+        exchange: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getAssets(input.assetClass as any);
+      }),
+
+    // Calendar & Clock
+    getClock: protectedProcedure
+      .query(async () => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getClock();
+      }),
+
+    getCalendar: protectedProcedure
+      .input(z.object({
+        start: z.string().optional(),
+        end: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getCalendar(input.start, input.end);
+      }),
+
+    // Last Closing Prices (for when market is closed)
+    getLastClosingPrices: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .query(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        
+        const results = await Promise.all(
+          input.symbols.map(async (symbol) => {
+            try {
+              // Get the latest bar data which includes close prices
+              // Calculate start date as 7 days ago to ensure we get at least 2 trading days
+              const startDate = new Date();
+              startDate.setDate(startDate.getDate() - 7);
+              
+              const bars = await adapter.getBars({
+                symbol,
+                timeframe: '1Day',
+                start: startDate,
+                limit: 5, // Get last 5 days to ensure we have enough data
+              });
+              
+              if (bars.length >= 1) {
+                const latestBar = bars[bars.length - 1];
+                const previousBar = bars.length >= 2 ? bars[bars.length - 2] : null;
+                
+                const close = latestBar.close;
+                const previousClose = previousBar?.close || latestBar.open;
+                const change = close - previousClose;
+                const changePercent = previousClose ? (change / previousClose) * 100 : 0;
+                
+                return {
+                  symbol: symbol.toUpperCase(),
+                  close,
+                  previousClose,
+                  change,
+                  changePercent,
+                  volume: latestBar.volume,
+                  timestamp: latestBar.timestamp,
+                };
+              }
+              return null;
+            } catch (error) {
+              console.error(`Error fetching closing price for ${symbol}:`, error);
+              return null;
+            }
+          })
+        );
+        
+        return results.filter((r): r is NonNullable<typeof r> => r !== null);
+      }),
+
+    // Watchlists
+    getWatchlists: protectedProcedure
+      .query(async () => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getWatchlists();
+      }),
+
+    createWatchlist: protectedProcedure
+      .input(z.object({
+        name: z.string(),
+        symbols: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.createWatchlist(input.name, input.symbols);
+      }),
+
+    updateWatchlist: protectedProcedure
+      .input(z.object({
+        watchlistId: z.string(),
+        name: z.string().optional(),
+        symbols: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.updateWatchlist(input.watchlistId, input.name, input.symbols);
+      }),
+
+    deleteWatchlist: protectedProcedure
+      .input(z.object({
+        watchlistId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.deleteWatchlist(input.watchlistId);
+      }),
+
+    // Broker Capabilities
+    getCapabilities: protectedProcedure
+      .query(async () => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        return adapter.getCapabilities();
+      }),
+
+    // Connection Test
+    testConnection: protectedProcedure
+      .input(z.object({ connectionId: z.string() }))
+      .mutation(async ({ input }) => {
+        const { AlpacaBrokerAdapter } = await import('./services/brokers/AlpacaBrokerAdapter');
+        const adapter = new AlpacaBrokerAdapter();
+        const result = await adapter.testConnection();
+        return { success: result.success, error: result.success ? undefined : result.message };
+      }),
+  }),
+
+  // ==================== ORDER ROUTING PREFERENCES ====================
+  routing: router({
+    // Get user's routing preferences
+    getPreferences: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getDb } = await import('./db');
+        const { userRoutingPreferences } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('Database not available');
+        
+        const prefs = await db.select().from(userRoutingPreferences)
+          .where(eq(userRoutingPreferences.userId, String(ctx.user.id)))
+          .limit(1);
+        
+        if (prefs.length === 0) {
+          // Return default preferences matching schema column names
+          return {
+            enableSmartRouting: true,
+            preferredStockBroker: null,
+            preferredCryptoBroker: null,
+            preferredForexBroker: null,
+            preferredOptionsBroker: null,
+            allowFallback: true,
+            prioritizeLowFees: false,
+            prioritizeFastExecution: false,
+          };
+        }
+        
+        return prefs[0];
+      }),
+
+    // Save user's routing preferences
+    savePreferences: protectedProcedure
+      .input(z.object({
+        smartRoutingEnabled: z.boolean(),
+        preferredStockBroker: z.string().nullable().optional(),
+        preferredCryptoBroker: z.string().nullable().optional(),
+        preferredForexBroker: z.string().nullable().optional(),
+        preferredOptionsBroker: z.string().nullable().optional(),
+        preferredFuturesBroker: z.string().nullable().optional(),
+        fallbackEnabled: z.boolean().optional(),
+        costOptimization: z.boolean().optional(),
+        speedPriority: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { getDb } = await import('./db');
+        const { userRoutingPreferences } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        const db = await getDb();
+        if (!db) throw new Error('Database not available');
+        
+        // Check if preferences exist
+        const existing = await db.select().from(userRoutingPreferences)
+          .where(eq(userRoutingPreferences.userId, String(ctx.user.id)))
+          .limit(1);
+        
+        const now = new Date();
+        
+        if (existing.length === 0) {
+          // Insert new preferences - use correct column names from schema
+          await db.insert(userRoutingPreferences).values({
+            userId: String(ctx.user.id),
+            enableSmartRouting: input.smartRoutingEnabled ?? true,
+            preferredStockBroker: (input.preferredStockBroker as 'alpaca' | 'interactive_brokers') || null,
+            preferredCryptoBroker: (input.preferredCryptoBroker as 'binance' | 'coinbase' | 'alpaca') || null,
+            preferredForexBroker: (input.preferredForexBroker as 'interactive_brokers') || null,
+            preferredOptionsBroker: (input.preferredOptionsBroker as 'interactive_brokers') || null,
+            allowFallback: input.fallbackEnabled ?? true,
+            prioritizeLowFees: input.costOptimization ?? false,
+            prioritizeFastExecution: input.speedPriority ?? false,
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          // Update existing preferences - use correct column names from schema
+          await db.update(userRoutingPreferences)
+            .set({
+              enableSmartRouting: input.smartRoutingEnabled ?? true,
+              preferredStockBroker: (input.preferredStockBroker as 'alpaca' | 'interactive_brokers') || null,
+              preferredCryptoBroker: (input.preferredCryptoBroker as 'binance' | 'coinbase' | 'alpaca') || null,
+              preferredForexBroker: (input.preferredForexBroker as 'interactive_brokers') || null,
+              preferredOptionsBroker: (input.preferredOptionsBroker as 'interactive_brokers') || null,
+              allowFallback: input.fallbackEnabled ?? true,
+              prioritizeLowFees: input.costOptimization ?? false,
+              prioritizeFastExecution: input.speedPriority ?? false,
+              updatedAt: now,
+            })
+            .where(eq(userRoutingPreferences.userId, String(ctx.user.id)));
+        }
+        
+        return { success: true };
+      }),
+
+    // Get routing recommendation for a symbol
+    getRecommendation: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        orderType: z.enum(['market', 'limit', 'stop', 'stop_limit']).optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const { orderRouter, detectAssetClass } = await import('./services/brokers/OrderRouter');
+        const { getDb } = await import('./db');
+        const { brokerConnections } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        
+        const db = await getDb();
+        if (!db) return { selectedBroker: null, confidence: 0, reason: 'Database not available', assetClass: 'unknown', connectedBrokers: [] };
+        const connections = await db.select().from(brokerConnections)
+          .where(eq(brokerConnections.userId, String(ctx.user.id)));
+        const assetClass = detectAssetClass(input.symbol);
+        
+        const recommendation = orderRouter.selectBroker(
+          input.symbol,
+          {
+            enableSmartRouting: true,
+            allowFallback: true,
+            prioritizeLowFees: false,
+            prioritizeFastExecution: true,
+          }
+        );
+        
+        return {
+          ...recommendation,
+          assetClass,
+          connectedBrokers: connections.map((c: any) => ({
+            id: String(c.id),
+            brokerType: c.brokerType,
+            isActive: c.isActive,
+          })),
+        };
+      }),
+
+    // Get available brokers for each asset class
+    getAvailableBrokers: protectedProcedure
+      .query(async ({ ctx }) => {
+        const { getDb } = await import('./db');
+        const { brokerConnections } = await import('../drizzle/schema');
+        const { eq } = await import('drizzle-orm');
+        
+        const db = await getDb();
+        if (!db) return { stocks: [], crypto: [], forex: [], options: [], futures: [] };
+        const connections = await db.select().from(brokerConnections)
+          .where(eq(brokerConnections.userId, String(ctx.user.id)));
+        
+        const brokerCapabilities: Record<string, string[]> = {
+          alpaca: ['stocks', 'crypto'],
+          interactive_brokers: ['stocks', 'options', 'futures', 'forex'],
+          binance: ['crypto'],
+          coinbase: ['crypto'],
+        };
+        
+        const result: Record<string, Array<{ id: string; brokerType: string; isActive: boolean }>> = {
+          stocks: [],
+          crypto: [],
+          forex: [],
+          options: [],
+          futures: [],
+        };
+        
+        for (const conn of connections as any[]) {
+          const capabilities = brokerCapabilities[conn.brokerType] || [];
+          for (const cap of capabilities) {
+            if (result[cap]) {
+              result[cap].push({
+                id: String(conn.id),
+                brokerType: conn.brokerType,
+                isActive: conn.isActive,
+              });
+            }
+          }
+        }
+        
+        return result;
+      }),
+  }),
+
+  // ==================== MULTI-ASSET ANALYSIS ====================
+  multiAsset: router({
+    // Analyze any asset type (stock, crypto, options, forex, commodity)
+    analyze: protectedProcedure
+      .input(z.object({
+        symbol: z.string(),
+        assetType: z.enum(['stock', 'crypto', 'options', 'forex', 'commodity']),
+        currentPrice: z.number(),
+        priceChange24h: z.number(),
+        priceChange7d: z.number().optional(),
+        volume24h: z.number(),
+        marketCap: z.number().optional(),
+        stockData: z.object({
+          sector: z.string(),
+          industry: z.string(),
+          peRatio: z.number().optional(),
+          earningsGrowth: z.number().optional(),
+          dividendYield: z.number().optional(),
+        }).optional(),
+        cryptoData: z.object({
+          symbol: z.string(),
+          category: z.enum(['layer1', 'layer2', 'defi', 'nft', 'gaming', 'meme', 'stablecoin', 'unknown']),
+          currentPrice: z.number(),
+          priceChange24h: z.number(),
+          priceChange7d: z.number(),
+          volume24h: z.number(),
+          marketCap: z.number(),
+        }).optional(),
+        optionsData: z.object({
+          symbol: z.string(),
+          underlyingPrice: z.number(),
+          greeks: z.object({
+            delta: z.number(),
+            gamma: z.number(),
+            theta: z.number(),
+            vega: z.number(),
+            rho: z.number(),
+            impliedVolatility: z.number(),
+            historicalVolatility: z.number(),
+            ivRank: z.number(),
+            ivPercentile: z.number(),
+            openInterest: z.number(),
+            volume: z.number(),
+            bid: z.number(),
+            ask: z.number(),
+            lastPrice: z.number(),
+            bidAskSpread: z.number(),
+            strikePrice: z.number(),
+            underlyingPrice: z.number(),
+            daysToExpiry: z.number(),
+            optionType: z.enum(['call', 'put']),
+          }),
+        }).optional(),
+        forexData: z.object({
+          baseCurrency: z.string(),
+          quoteCurrency: z.string(),
+          interestRateDiff: z.number(),
+          centralBankBias: z.enum(['hawkish', 'neutral', 'dovish']),
+          cotPositioning: z.number(),
+        }).optional(),
+        commodityData: z.object({
+          commodityType: z.enum(['energy', 'metals', 'agriculture', 'livestock']),
+          inventoryLevels: z.number(),
+          seasonalPattern: z.number(),
+          supplyDisruption: z.boolean(),
+        }).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { UnifiedMultiAssetOrchestrator } = await import('./services/ai-agents/UnifiedMultiAssetOrchestrator');
+        const orchestrator = new UnifiedMultiAssetOrchestrator();
+        return orchestrator.analyze(input);
+      }),
+
+    // Analyze portfolio across multiple asset types
+    analyzePortfolio: protectedProcedure
+      .input(z.object({
+        assets: z.array(z.object({
+          symbol: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'options', 'forex', 'commodity']),
+          currentPrice: z.number(),
+          priceChange24h: z.number(),
+          priceChange7d: z.number().optional(),
+          volume24h: z.number(),
+          marketCap: z.number().optional(),
+        })),
+      }))
+      .mutation(async ({ input }) => {
+        const { UnifiedMultiAssetOrchestrator } = await import('./services/ai-agents/UnifiedMultiAssetOrchestrator');
+        const orchestrator = new UnifiedMultiAssetOrchestrator();
+        return orchestrator.analyzePortfolio(input.assets);
+      }),
+
+    // Detect asset type from symbol
+    detectAssetType: publicProcedure
+      .input(z.object({ symbol: z.string() }))
+      .query(async ({ input }) => {
+        const { detectAssetType } = await import('./services/ai-agents/UnifiedMultiAssetOrchestrator');
+        return { assetType: detectAssetType(input.symbol) };
+      }),
+  }),
+
+  // Real-time price feed router
+  realtimePrices: router({
+    // Get current price for a single symbol
+    getPrice: publicProcedure
+      .input(z.object({
+        symbol: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const { realtimePriceFeed, detectAssetTypeFromSymbol, generateSimulatedPrice } = await import('./services/realtimePriceFeed');
+        const price = realtimePriceFeed.getPrice(input.symbol);
+        if (price) return price;
+        
+        // Generate fresh price if not cached
+        const assetType = detectAssetTypeFromSymbol(input.symbol);
+        const { generateSimulatedPrice: genPrice } = await import('./services/realtimePriceFeed');
+        return genPrice(input.symbol, assetType);
+      }),
+
+    // Get prices for multiple symbols
+    getPrices: publicProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .query(async ({ input }) => {
+        const { getAggregatedPrices, detectAssetTypeFromSymbol } = await import('./services/realtimePriceFeed');
+        
+        // Group symbols by asset type
+        const grouped: { stocks: string[]; crypto: string[]; forex: string[]; commodities: string[] } = {
+          stocks: [],
+          crypto: [],
+          forex: [],
+          commodities: [],
+        };
+        
+        input.symbols.forEach(symbol => {
+          const assetType = detectAssetTypeFromSymbol(symbol);
+          switch (assetType) {
+            case 'stock': grouped.stocks.push(symbol); break;
+            case 'crypto': grouped.crypto.push(symbol); break;
+            case 'forex': grouped.forex.push(symbol); break;
+            case 'commodity': grouped.commodities.push(symbol); break;
+          }
+        });
+        
+        const aggregated = getAggregatedPrices(grouped);
+        
+        // Flatten to a single array
+        return {
+          prices: [
+            ...aggregated.stocks,
+            ...aggregated.crypto,
+            ...aggregated.forex,
+            ...aggregated.commodities,
+          ],
+          timestamp: aggregated.timestamp,
+        };
+      }),
+
+    // Get aggregated prices by asset type
+    getAggregatedPrices: publicProcedure
+      .input(z.object({
+        stocks: z.array(z.string()).optional(),
+        crypto: z.array(z.string()).optional(),
+        forex: z.array(z.string()).optional(),
+        commodities: z.array(z.string()).optional(),
+      }))
+      .query(async ({ input }) => {
+        const { getAggregatedPrices } = await import('./services/realtimePriceFeed');
+        return getAggregatedPrices(input);
+      }),
+
+    // Get default watchlist
+    getDefaultWatchlist: publicProcedure
+      .query(async () => {
+        const { DEFAULT_WATCHLIST } = await import('./services/realtimePriceFeed');
+        return DEFAULT_WATCHLIST;
+      }),
+
+    // Subscribe to price updates (initializes the feed)
+    subscribe: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .mutation(async ({ input }) => {
+        const { realtimePriceFeed, detectAssetTypeFromSymbol } = await import('./services/realtimePriceFeed');
+        
+        input.symbols.forEach(symbol => {
+          const assetType = detectAssetTypeFromSymbol(symbol);
+          realtimePriceFeed.subscribe({ symbol, assetType });
+        });
+        
+        return { subscribed: input.symbols, status: 'active' };
+      }),
+
+    // Unsubscribe from price updates
+    unsubscribe: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string()),
+      }))
+      .mutation(async ({ input }) => {
+        const { realtimePriceFeed } = await import('./services/realtimePriceFeed');
+        
+        input.symbols.forEach(symbol => {
+          realtimePriceFeed.unsubscribe(symbol);
+        });
+        
+        return { unsubscribed: input.symbols };
+      }),
+
+    // Get feed service status
+    getStatus: publicProcedure
+      .query(async () => {
+        const { realtimePriceFeed } = await import('./services/realtimePriceFeed');
+        return realtimePriceFeed.getStatus();
+      }),
+
+    // Force refresh price for a symbol
+    refreshPrice: publicProcedure
+      .input(z.object({ symbol: z.string() }))
+      .mutation(async ({ input }) => {
+        const { realtimePriceFeed } = await import('./services/realtimePriceFeed');
+        return realtimePriceFeed.refreshPrice(input.symbol);
+      }),
+  }),
+
+  // Cross-Asset Correlation Router
+  correlation: router({
+    // Get correlation matrix for specified assets
+    getMatrix: publicProcedure
+      .input(z.object({
+        symbols: z.array(z.string()).min(2).max(20),
+        assetTypes: z.array(z.enum(['stock', 'crypto', 'forex', 'commodity', 'option'])).optional(),
+        period: z.enum(['24h', '7d', '30d']).default('7d'),
+      }))
+      .query(async ({ input }) => {
+        const correlationService = await import('./services/correlationService');
+        
+        // Get or generate price histories for requested symbols
+        const assets = input.symbols.map((symbol, index) => {
+          const assetType = input.assetTypes?.[index] || 'stock';
+          let history = correlationService.getPriceHistory(symbol, assetType);
+          
+          if (!history) {
+            // Generate simulated data if not in cache
+            const basePrice = assetType === 'crypto' ? 1000 + Math.random() * 50000 : 100 + Math.random() * 400;
+            const volatility = assetType === 'crypto' ? 0.03 : 0.015;
+            history = correlationService.generateSimulatedPriceHistory(symbol, assetType, basePrice, volatility);
+          }
+          
+          return history;
+        });
+        
+        return correlationService.calculateCorrelationMatrix(assets, input.period);
+      }),
+
+    // Get correlation between two specific assets
+    getPairCorrelation: publicProcedure
+      .input(z.object({
+        asset1: z.object({
+          symbol: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'forex', 'commodity', 'option']),
+        }),
+        asset2: z.object({
+          symbol: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'forex', 'commodity', 'option']),
+        }),
+        period: z.enum(['24h', '7d', '30d']).default('7d'),
+      }))
+      .query(async ({ input }) => {
+        const correlationService = await import('./services/correlationService');
+        
+        let history1 = correlationService.getPriceHistory(input.asset1.symbol, input.asset1.assetType);
+        let history2 = correlationService.getPriceHistory(input.asset2.symbol, input.asset2.assetType);
+        
+        if (!history1) {
+          const basePrice = input.asset1.assetType === 'crypto' ? 10000 : 150;
+          history1 = correlationService.generateSimulatedPriceHistory(
+            input.asset1.symbol, input.asset1.assetType, basePrice, 0.02
+          );
+        }
+        
+        if (!history2) {
+          const basePrice = input.asset2.assetType === 'crypto' ? 10000 : 150;
+          history2 = correlationService.generateSimulatedPriceHistory(
+            input.asset2.symbol, input.asset2.assetType, basePrice, 0.02
+          );
+        }
+        
+        return correlationService.calculateAssetCorrelation(history1, history2, input.period);
+      }),
+
+    // Seed demo correlation data
+    seedDemoData: publicProcedure
+      .mutation(async () => {
+        const correlationService = await import('./services/correlationService');
+        correlationService.seedDemoCorrelationData();
+        return { success: true, message: 'Demo correlation data seeded successfully' };
+      }),
+
+    // Get available assets with price history
+    getAvailableAssets: publicProcedure
+      .query(async () => {
+        const correlationService = await import('./services/correlationService');
+        const assets = correlationService.getCachedAssets();
+        return assets.map(a => ({
+          symbol: a.symbol,
+          assetType: a.assetType,
+          dataPoints: a.prices.length,
+          latestPrice: a.prices[a.prices.length - 1]?.price || 0,
+          oldestTimestamp: a.prices[0]?.timestamp || 0,
+          newestTimestamp: a.prices[a.prices.length - 1]?.timestamp || 0,
+        }));
+      }),
+
+    // Get correlation color for visualization
+    getCorrelationColor: publicProcedure
+      .input(z.object({ correlation: z.number().min(-1).max(1) }))
+      .query(async ({ input }) => {
+        const correlationService = await import('./services/correlationService');
+        return {
+          color: correlationService.getCorrelationColor(input.correlation),
+          strength: correlationService.getCorrelationStrength(input.correlation),
+        };
+      }),
+
+    // Clear correlation cache
+    clearCache: protectedProcedure
+      .mutation(async () => {
+        const correlationService = await import('./services/correlationService');
+        correlationService.clearPriceHistoryCache();
+        return { success: true, message: 'Correlation cache cleared' };
+      }),
+  }),
+
+  // Portfolio Optimizer Router
+  portfolioOptimizer: router({
+    // Get sample assets for optimization
+    getSampleAssets: publicProcedure
+      .query(async () => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.generateSampleAssets();
+      }),
+
+    // Optimize portfolio based on risk profile
+    optimize: protectedProcedure
+      .input(z.object({
+        assets: z.array(z.object({
+          symbol: z.string(),
+          name: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'forex', 'commodity', 'bond']),
+          expectedReturn: z.number(),
+          volatility: z.number(),
+          currentPrice: z.number(),
+        })),
+        riskProfile: z.enum(['conservative', 'moderate', 'balanced', 'growth', 'aggressive']),
+        iterations: z.number().optional().default(10000),
+      }))
+      .mutation(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.optimizePortfolio(input.assets, input.riskProfile, input.iterations);
+      }),
+
+    // Generate efficient frontier
+    getEfficientFrontier: protectedProcedure
+      .input(z.object({
+        assets: z.array(z.object({
+          symbol: z.string(),
+          name: z.string(),
+          assetType: z.enum(['stock', 'crypto', 'forex', 'commodity', 'bond']),
+          expectedReturn: z.number(),
+          volatility: z.number(),
+          currentPrice: z.number(),
+        })),
+        points: z.number().optional().default(50),
+      }))
+      .mutation(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.generateEfficientFrontier(input.assets, input.points);
+      }),
+
+    // Run Monte Carlo simulation
+    runMonteCarloSimulation: protectedProcedure
+      .input(z.object({
+        expectedReturn: z.number(),
+        expectedVolatility: z.number(),
+        initialValue: z.number(),
+        yearsToProject: z.number().optional().default(5),
+        simulations: z.number().optional().default(10000),
+        targetReturn: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        const portfolio = {
+          allocations: [],
+          expectedReturn: input.expectedReturn,
+          expectedVolatility: input.expectedVolatility,
+          sharpeRatio: 0,
+          riskProfile: 'balanced' as const,
+          diversificationScore: 0,
+          efficientFrontierPosition: 'optimal' as const,
+        };
+        return optimizer.runMonteCarloSimulation(
+          portfolio,
+          input.initialValue,
+          input.yearsToProject,
+          input.simulations,
+          input.targetReturn
+        );
+      }),
+
+    // Calculate rebalancing recommendations
+    getRebalancingRecommendations: protectedProcedure
+      .input(z.object({
+        currentAllocations: z.array(z.object({
+          symbol: z.string(),
+          weight: z.number(),
+        })),
+        targetAllocations: z.array(z.object({
+          symbol: z.string(),
+          name: z.string(),
+          assetType: z.string(),
+          weight: z.number(),
+          expectedContribution: z.number(),
+        })),
+        threshold: z.number().optional().default(0.05),
+      }))
+      .mutation(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.calculateRebalancing(
+          input.currentAllocations,
+          input.targetAllocations,
+          input.threshold
+        );
+      }),
+
+    // Get risk profile description
+    getRiskProfileDescription: publicProcedure
+      .input(z.object({
+        profile: z.enum(['conservative', 'moderate', 'balanced', 'growth', 'aggressive']),
+      }))
+      .query(async ({ input }) => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        return optimizer.getRiskProfileDescription(input.profile);
+      }),
+
+     // Get all risk profiles
+    getAllRiskProfiles: publicProcedure
+      .query(async () => {
+        const optimizer = await import('./services/portfolioOptimizer');
+        const profiles = ['conservative', 'moderate', 'balanced', 'growth', 'aggressive'] as const;
+        return profiles.map(p => ({
+          id: p,
+          ...optimizer.getRiskProfileDescription(p),
+        }));
+      }),
+  }),
+
+  // ==================== EARNINGS SENTIMENT BACKTESTING ====================
+  earningsBacktest: router({
+    // Run a full backtest on earnings sentiment vs price movements
+    runBacktest: protectedProcedure
+      .input(z.object({
+        symbols: z.array(z.string().min(1).max(10)).min(1).max(50),
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        minSampleSize: z.number().min(5).max(1000).default(10),
+        confidenceLevel: z.number().min(0.8).max(0.99).default(0.95),
+        timeframes: z.array(z.enum(['1d', '3d', '5d', '10d', '30d'])).default(['1d', '3d', '5d', '10d', '30d']),
+      }))
+      .mutation(async ({ input }) => {
+        const { EarningsSentimentBacktester } = await import('./services/backtesting/EarningsSentimentBacktester');
+        const backtester = new EarningsSentimentBacktester();
+        return backtester.runBacktest({
+          symbols: input.symbols,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          minimumSampleSize: input.minSampleSize,
+          confidenceLevel: input.confidenceLevel,
+          timeframes: input.timeframes,
+          includeSectorAnalysis: false,
+          includeMarketCapAnalysis: false,
+          benchmarkSymbol: 'SPY',
+        });
+      }),
+
+    // Get correlation analysis for a single symbol
+    analyzeSymbol: protectedProcedure
+      .input(z.object({
+        symbol: z.string().min(1).max(10),
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      }))
+      .mutation(async ({ input }) => {
+        const { EarningsSentimentBacktester } = await import('./services/backtesting/EarningsSentimentBacktester');
+        const backtester = new EarningsSentimentBacktester();
+        return backtester.runBacktest({
+          symbols: [input.symbol],
+          startDate: input.startDate,
+          endDate: input.endDate,
+          minimumSampleSize: 5,
+          confidenceLevel: 0.95,
+          timeframes: ['1d', '3d', '5d', '10d', '30d'],
+          includeSectorAnalysis: false,
+          includeMarketCapAnalysis: false,
+          benchmarkSymbol: 'SPY',
+        });
+      }),
+
+    // Get demo backtest results (pre-computed for demonstration)
+    getDemoResults: publicProcedure
+      .query(async () => {
+        // Return pre-computed demo results for display
+        return {
+          summary: {
+            totalEarningsEvents: 156,
+            symbolsAnalyzed: 10,
+            dateRange: { start: '2023-01-01', end: '2025-12-31' },
+            overallCorrelation: 0.42,
+            bestTimeframe: '3d',
+            predictionAccuracy: 0.68,
+          },
+          correlationMatrix: {
+            factors: ['overall', 'managementOptimism', 'managementConfidence', 'analystSatisfaction', 'guidanceStrength'],
+            timeframes: ['1d', '3d', '5d', '10d', '30d'],
+            correlations: [
+              [0.35, 0.42, 0.38, 0.32, 0.28],
+              [0.38, 0.45, 0.41, 0.35, 0.30],
+              [0.32, 0.40, 0.36, 0.30, 0.25],
+              [0.28, 0.35, 0.32, 0.27, 0.22],
+              [0.40, 0.48, 0.44, 0.38, 0.32],
+            ],
+            pValues: [
+              [0.02, 0.01, 0.02, 0.04, 0.08],
+              [0.01, 0.005, 0.01, 0.03, 0.06],
+              [0.03, 0.02, 0.02, 0.05, 0.10],
+              [0.05, 0.03, 0.04, 0.07, 0.12],
+              [0.01, 0.003, 0.008, 0.02, 0.05],
+            ],
+          },
+          signalPerformance: {
+            bullishSignals: { count: 62, accuracy: 0.72, avgReturn: 4.2 },
+            bearishSignals: { count: 48, accuracy: 0.65, avgReturn: -3.8 },
+            neutralSignals: { count: 46, accuracy: 0.58, avgReturn: 0.8 },
+          },
+          topPredictors: [
+            { factor: 'guidanceStrength', correlation: 0.48, pValue: 0.003, significance: 'high' },
+            { factor: 'managementOptimism', correlation: 0.45, pValue: 0.005, significance: 'high' },
+            { factor: 'overall', correlation: 0.42, pValue: 0.01, significance: 'high' },
+            { factor: 'managementConfidence', correlation: 0.40, pValue: 0.02, significance: 'medium' },
+            { factor: 'analystSatisfaction', correlation: 0.35, pValue: 0.03, significance: 'medium' },
+          ],
+          sampleResults: [
+            { symbol: 'AAPL', date: '2024-10-31', sentiment: 0.72, return1d: 2.1, return3d: 4.5, return5d: 3.8 },
+            { symbol: 'MSFT', date: '2024-10-22', sentiment: 0.68, return1d: 1.8, return3d: 3.2, return5d: 2.9 },
+            { symbol: 'GOOGL', date: '2024-10-29', sentiment: 0.55, return1d: -0.5, return3d: 1.2, return5d: 0.8 },
+            { symbol: 'NVDA', date: '2024-11-20', sentiment: 0.85, return1d: 5.2, return3d: 8.1, return5d: 7.5 },
+            { symbol: 'META', date: '2024-10-30', sentiment: 0.78, return1d: 3.5, return3d: 5.8, return5d: 4.9 },
+            { symbol: 'AMZN', date: '2024-10-31', sentiment: 0.62, return1d: 1.2, return3d: 2.5, return5d: 2.1 },
+            { symbol: 'TSLA', date: '2024-10-23', sentiment: 0.45, return1d: -2.8, return3d: -4.2, return5d: -3.5 },
+            { symbol: 'AMD', date: '2024-10-29', sentiment: 0.58, return1d: 0.8, return3d: 1.5, return5d: 1.2 },
+          ],
+          insights: [
+            'Guidance strength shows the strongest predictive power for 3-day returns (r=0.48, p<0.01)',
+            'Management optimism is a reliable indicator, especially for tech stocks',
+            'Bearish signals have lower accuracy but higher magnitude returns',
+            'The 3-day timeframe consistently shows the strongest correlations',
+            'Analyst satisfaction has weaker predictive power than management tone',
+          ],
+        };
+      }),
+
+    // Calculate correlation between two arrays
+    calculateCorrelation: protectedProcedure
+      .input(z.object({
+        sentimentScores: z.array(z.number()).min(3),
+        priceReturns: z.array(z.number()).min(3),
+      }))
+      .mutation(async ({ input }) => {
+        const { SentimentPriceCorrelation } = await import('./services/backtesting/SentimentPriceCorrelation');
+        const engine = new SentimentPriceCorrelation();
+        return engine.calculateCorrelation(input.sentimentScores, input.priceReturns);
+      }),
+  }),
+
+  // ==================== SEC EDGAR FILINGS ====================
+  secFilings: router({
+    // List SEC filings for a ticker
+    list: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1).max(10),
+        limit: z.number().min(1).max(50).default(20),
+      }))
+      .query(async ({ input }) => {
+        return enhancedFundamentalAnalyst.listFilings(input.ticker, input.limit);
+      }),
+
+    // Get filing summary
+    getSummary: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1).max(10),
+        filingType: z.enum(['10-K', '10-Q']).default('10-K'),
+      }))
+      .query(async ({ input }) => {
+        return enhancedFundamentalAnalyst.getFilingSummary(input.ticker, input.filingType);
+      }),
+
+    // Get XBRL financial metrics
+    getMetrics: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1).max(10),
+      }))
+      .query(async ({ input }) => {
+        return enhancedFundamentalAnalyst.getFinancialMetrics(input.ticker);
+      }),
+
+    // Ask a question about filings
+    askQuestion: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1).max(10),
+        question: z.string().min(1).max(500),
+      }))
+      .mutation(async ({ input }) => {
+        return enhancedFundamentalAnalyst.askQuestion(input.ticker, input.question);
+      }),
+
+    // Run enhanced fundamental analysis
+    analyze: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1).max(10),
+      }))
+      .mutation(async ({ input }) => {
+        return enhancedFundamentalAnalyst.analyze(input.ticker);
+      }),
+
+    // Run deep dive analysis
+    deepDive: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1).max(10),
+        focusAreas: z.array(z.enum(['risk_factors', 'mda', 'business', 'financials', 'compensation'])).optional(),
+        compareYoY: z.boolean().optional(),
+        specificQuestions: z.array(z.string()).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return enhancedFundamentalAnalyst.deepDive({
+          ticker: input.ticker,
+          focusAreas: input.focusAreas,
+          compareYoY: input.compareYoY,
+          specificQuestions: input.specificQuestions,
+        });
+      }),
+
+    // Get company info from SEC
+    getCompanyInfo: protectedProcedure
+      .input(z.object({
+        ticker: z.string().min(1).max(10),
+      }))
+      .query(async ({ input }) => {
+        const cik = await secEdgarService.getCIKByTicker(input.ticker);
+        if (!cik) return null;
+        const submissions = await secEdgarService.getCompanySubmissions(cik);
+        return submissions?.companyInfo || null;
+      }),
+  }),
+
+  // ==================== AI COMMAND CENTER ====================
+  commandCenter: router({
+    // Get summary dashboard data
+    getSummary: protectedProcedure
+      .query(async () => {
+        return commandCenterDataService.getSummary();
+      }),
+
+    // Get all agent statuses
+    getAgentStatuses: protectedProcedure
+      .query(async () => {
+        return commandCenterDataService.getAgentStatuses();
+      }),
+
+    // Get aggregated signals with optional filters
+    getSignals: protectedProcedure
+      .input(z.object({
+        assetClass: z.string().optional(),
+        direction: z.enum(['bullish', 'bearish', 'neutral']).optional(),
+        minConfidence: z.number().min(0).max(100).optional(),
+        source: z.string().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        return commandCenterDataService.getAggregatedSignals(input);
+      }),
+
+    // Get portfolio metrics
+    getPortfolioMetrics: protectedProcedure
+      .query(async () => {
+        return commandCenterDataService.getPortfolioMetrics();
+      }),
+
+    // Get pending actions
+    getPendingActions: protectedProcedure
+      .query(async () => {
+        return commandCenterDataService.getPendingActions();
+      }),
+
+    // Execute a signal
+    executeSignal: protectedProcedure
+      .input(z.object({
+        signalId: z.string(),
+        size: z.enum(['small', 'medium', 'large']).optional(),
+        orderType: z.enum(['market', 'limit']).optional(),
+        limitPrice: z.number().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return commandCenterDataService.executeSignal(input.signalId, {
+          size: input.size,
+          orderType: input.orderType,
+          limitPrice: input.limitPrice,
+        });
+      }),
+
+    // Process voice command
+    processVoiceCommand: protectedProcedure
+      .input(z.object({
+        command: z.string().min(1).max(500),
+      }))
+      .mutation(async ({ input }) => {
+        return commandCenterDataService.processVoiceCommand(input.command);
+      }),
+
+    // Approve pending action
+    approveAction: protectedProcedure
+      .input(z.object({
+        actionId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        return commandCenterDataService.approveAction(input.actionId);
+      }),
+
+    // Reject pending action
+    rejectAction: protectedProcedure
+      .input(z.object({
+        actionId: z.string(),
+        reason: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return commandCenterDataService.rejectAction(input.actionId, input.reason);
+      }),
   }),
 });
-
 export type AppRouter = typeof appRouter;

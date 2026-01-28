@@ -1,9 +1,0 @@
-{
-  "query": "CREATE TABLE IF NOT EXISTS agent_weight_history (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  user_id VARCHAR(255) NOT NULL,\n  snapshot_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  market_regime VARCHAR(50) NOT NULL,\n  technical_weight DECIMAL(5,4) NOT NULL,\n  fundamental_weight DECIMAL(5,4) NOT NULL,\n  sentiment_weight DECIMAL(5,4) NOT NULL,\n  risk_weight DECIMAL(5,4) NOT NULL,\n  regime_weight DECIMAL(5,4) NOT NULL,\n  execution_weight DECIMAL(5,4) NOT NULL,\n  coordinator_weight DECIMAL(5,4) NOT NULL,\n  trigger_reason VARCHAR(255),\n  performance_metrics JSON,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  INDEX idx_user_timestamp (user_id, snapshot_timestamp),\n  INDEX idx_market_regime (market_regime)\n);",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2JvR2JmsVzzzo8g.542b2be615eb --database cYbBY4G8kX53fA5ZWwbsKK --execute CREATE TABLE IF NOT EXISTS agent_weight_history (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  user_id VARCHAR(255) NOT NULL,\n  snapshot_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  market_regime VARCHAR(50) NOT NULL,\n  technical_weight DECIMAL(5,4) NOT NULL,\n  fundamental_weight DECIMAL(5,4) NOT NULL,\n  sentiment_weight DECIMAL(5,4) NOT NULL,\n  risk_weight DECIMAL(5,4) NOT NULL,\n  regime_weight DECIMAL(5,4) NOT NULL,\n  execution_weight DECIMAL(5,4) NOT NULL,\n  coordinator_weight DECIMAL(5,4) NOT NULL,\n  trigger_reason VARCHAR(255),\n  performance_metrics JSON,\n  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  INDEX idx_user_timestamp (user_id, snapshot_timestamp),\n  INDEX idx_market_regime (market_regime)\n);",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 1814
-}

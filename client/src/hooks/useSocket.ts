@@ -372,6 +372,112 @@ export function useBotStatusSubscription(botId: number | null) {
   return status;
 }
 
+// Hook for Alpaca stream status
+export function useAlpacaStreamStatus() {
+  const [status, setStatus] = useState<{
+    connected: boolean;
+    authenticated: boolean;
+    subscribedSymbols: string[];
+    reconnectAttempts: number;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/api/trpc/system.alpacaStreamStatus');
+        const data = await res.json();
+        if (data?.result?.data) {
+          setStatus(data.result.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch Alpaca stream status:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStatus();
+    // Poll every 10 seconds
+    const interval = setInterval(fetchStatus, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return { status, isLoading };
+}
+
+// Hook for subscribing to Alpaca real-time prices
+export function useAlpacaPriceSubscription(symbols: string[]) {
+  const { subscribeToPrices, unsubscribeFromPrices, onPriceUpdate, isConnected } = useSocket();
+  const [prices, setPrices] = useState<Map<string, PriceUpdate>>(new Map());
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Subscribe to Alpaca stream for these symbols
+  useEffect(() => {
+    if (symbols.length === 0) return;
+
+    // Request server to subscribe to Alpaca stream
+    fetch('/api/trpc/system.subscribeAlpacaSymbols', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols }),
+    }).catch(err => console.error('Failed to subscribe to Alpaca:', err));
+
+    return () => {
+      fetch('/api/trpc/system.unsubscribeAlpacaSymbols', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols }),
+      }).catch(err => console.error('Failed to unsubscribe from Alpaca:', err));
+    };
+  }, [symbols.join(',')]);
+
+  // Fetch initial prices
+  useEffect(() => {
+    if (symbols.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    fetch(`/api/trpc/market.getLivePrices?input=${encodeURIComponent(JSON.stringify({ symbols }))}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.result?.data) {
+          const newPrices = new Map<string, PriceUpdate>();
+          Object.entries(data.result.data).forEach(([symbol, priceData]: [string, any]) => {
+            if (priceData) {
+              newPrices.set(symbol.toUpperCase(), priceData);
+            }
+          });
+          setPrices(newPrices);
+        }
+      })
+      .catch(err => console.error('Failed to fetch initial prices:', err))
+      .finally(() => setIsLoading(false));
+  }, [symbols.join(',')]);
+
+  // Subscribe to WebSocket updates
+  useEffect(() => {
+    if (!isConnected || symbols.length === 0) return;
+
+    subscribeToPrices(symbols);
+
+    const cleanup = onPriceUpdate((update) => {
+      if (symbols.map(s => s.toUpperCase()).includes(update.symbol.toUpperCase())) {
+        setPrices((prev) => new Map(prev).set(update.symbol.toUpperCase(), update));
+      }
+    });
+
+    return () => {
+      cleanup();
+      unsubscribeFromPrices(symbols);
+    };
+  }, [isConnected, symbols.join(','), subscribeToPrices, unsubscribeFromPrices, onPriceUpdate]);
+
+  return { prices, isLoading };
+}
+
 // Hook for real-time notifications
 export function useNotificationSubscription() {
   const { subscribeToNotifications, onNotification, isConnected } = useSocket();

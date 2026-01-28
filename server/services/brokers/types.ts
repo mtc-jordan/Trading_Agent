@@ -13,7 +13,8 @@ export enum BrokerType {
   ALPACA = 'alpaca',
   INTERACTIVE_BROKERS = 'interactive_brokers',
   BINANCE = 'binance',
-  COINBASE = 'coinbase'
+  COINBASE = 'coinbase',
+  SCHWAB = 'schwab'
 }
 
 export enum OrderSide {
@@ -378,4 +379,179 @@ export interface BrokerInfo {
   requiresApproval: boolean;
   approvalUrl?: string;
   supportedRegions: string[];
+}
+
+// ============================================================================
+// Options Types
+// ============================================================================
+
+export enum OptionType {
+  CALL = 'call',
+  PUT = 'put'
+}
+
+export enum PositionIntent {
+  BUY_TO_OPEN = 'buy_to_open',
+  BUY_TO_CLOSE = 'buy_to_close',
+  SELL_TO_OPEN = 'sell_to_open',
+  SELL_TO_CLOSE = 'sell_to_close'
+}
+
+export interface OptionContract {
+  id: string;
+  symbol: string;
+  underlyingSymbol: string;
+  type: OptionType;
+  strikePrice: number;
+  expirationDate: Date;
+  delta?: number;
+  gamma?: number;
+  theta?: number;
+  vega?: number;
+  rho?: number;
+  impliedVolatility?: number;
+  openInterest?: number;
+  lastPrice?: number;
+  bidPrice?: number;
+  askPrice?: number;
+  volume?: number;
+  multiplier?: number;
+  style?: 'american' | 'european';
+}
+
+export interface OptionsChainRequest {
+  underlyingSymbol: string;
+  expirationDate?: Date;
+  strikePrice?: number;
+  type?: OptionType;
+}
+
+// ============================================================================
+// News Types
+// ============================================================================
+
+export interface NewsArticle {
+  id: string;
+  headline: string;
+  summary: string;
+  author?: string;
+  source: string;
+  url: string;
+  symbols: string[];
+  images?: { url: string; size: string }[];
+  createdAt: Date;
+  updatedAt?: Date;
+}
+
+// ============================================================================
+// Portfolio History
+// ============================================================================
+
+export interface PortfolioHistory {
+  timestamps: Date[];
+  equity: number[];
+  profitLoss: number[];
+  profitLossPct: number[];
+  baseValue: number;
+  timeframe: string;
+}
+
+// ============================================================================
+// Trade Type
+// ============================================================================
+
+export interface Trade {
+  symbol: string;
+  price: number;
+  size: number;
+  timestamp: Date;
+  exchange?: string;
+  conditions?: string[];
+}
+
+// ============================================================================
+// Snapshot Type
+// ============================================================================
+
+export interface Snapshot {
+  symbol: string;
+  latestTrade?: Trade;
+  latestQuote?: Quote;
+  minuteBar?: Bar;
+  dailyBar?: Bar;
+  prevDailyBar?: Bar;
+}
+
+// ============================================================================
+// Broker Service Interface
+// ============================================================================
+
+export interface IBrokerService {
+  // Broker identification
+  readonly brokerType: BrokerType;
+  readonly brokerName: string;
+  readonly capabilities: BrokerCapabilities;
+  
+  // Connection management
+  connect(credentials: BrokerCredentials): Promise<BrokerConnection>;
+  disconnect(): Promise<void>;
+  isConnected(): boolean;
+  refreshToken?(): Promise<TokenResponse>;
+  
+  // Account operations
+  getAccount(): Promise<BrokerAccount>;
+  getAccountBalance(): Promise<AccountBalance>;
+  getPortfolioHistory(period?: string, timeframe?: string): Promise<PortfolioHistory>;
+  
+  // Order operations
+  placeOrder(order: UnifiedOrder): Promise<OrderResponse>;
+  getOrder(orderId: string): Promise<OrderResponse>;
+  getOrders(status?: OrderStatus, limit?: number, after?: Date): Promise<OrderResponse[]>;
+  modifyOrder(update: OrderUpdate): Promise<OrderResponse>;
+  cancelOrder(orderId: string): Promise<boolean>;
+  cancelAllOrders(): Promise<boolean>;
+  
+  // Position operations
+  getPositions(): Promise<Position[]>;
+  getPosition(symbol: string): Promise<Position | null>;
+  closePosition(symbol: string, qty?: number, percentQty?: number): Promise<OrderResponse>;
+  closeAllPositions(): Promise<OrderResponse[]>;
+  
+  // Market data
+  getQuote(symbol: string): Promise<Quote>;
+  getQuotes(symbols: string[]): Promise<Map<string, Quote>>;
+  getBars(params: HistoricalDataParams): Promise<Bar[]>;
+  getSnapshot(symbol: string): Promise<Snapshot>;
+  getSnapshots(symbols: string[]): Promise<Map<string, Snapshot>>;
+  getTrades(symbol: string, start: Date, end?: Date, limit?: number): Promise<Trade[]>;
+  
+  // Asset information
+  getAsset(symbol: string): Promise<Asset>;
+  getAssets(assetClass?: AssetClass): Promise<Asset[]>;
+  
+  // Options (optional - not all brokers support)
+  getOptionsChain?(request: OptionsChainRequest): Promise<OptionContract[]>;
+  getOptionContract?(contractId: string): Promise<OptionContract>;
+  
+  // News (optional)
+  getNews?(symbols?: string[], limit?: number): Promise<NewsArticle[]>;
+  
+  // WebSocket streaming
+  subscribeToQuotes(symbols: string[], callback: QuoteCallback): void;
+  subscribeToBars(symbols: string[], callback: BarCallback): void;
+  subscribeToOrderUpdates(callback: OrderUpdateCallback): void;
+  subscribeToPositionUpdates?(callback: PositionUpdateCallback): void;
+  unsubscribe(symbols: string[]): void;
+  unsubscribeAll(): void;
+}
+
+// ============================================================================
+// Broker Registry
+// ============================================================================
+
+export interface BrokerRegistry {
+  register(broker: IBrokerService): void;
+  get(type: BrokerType): IBrokerService | undefined;
+  getAll(): IBrokerService[];
+  getSupportedBrokers(): BrokerInfo[];
 }

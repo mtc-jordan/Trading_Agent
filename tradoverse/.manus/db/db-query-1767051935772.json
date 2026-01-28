@@ -1,9 +1,0 @@
-{
-  "query": "ALTER TABLE oauth_states MODIFY COLUMN brokerType ENUM('alpaca', 'interactive_brokers', 'binance', 'coinbase', 'schwab') NOT NULL;",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2JvR2JmsVzzzo8g.542b2be615eb --database cYbBY4G8kX53fA5ZWwbsKK --execute ALTER TABLE oauth_states MODIFY COLUMN brokerType ENUM('alpaca', 'interactive_brokers', 'binance', 'coinbase', 'schwab') NOT NULL;",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 1668
-}

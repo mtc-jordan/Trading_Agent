@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
+// Switch removed to fix infinite loop bug with Radix UI ref handling
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useBroker, BrokerType, BrokerConnection } from '@/contexts/BrokerContext';
@@ -50,14 +50,16 @@ const BrokerIcon = ({ type }: { type: BrokerType }) => {
     alpaca: 'bg-yellow-500',
     interactive_brokers: 'bg-red-600',
     binance: 'bg-yellow-400',
-    coinbase: 'bg-blue-600'
+    coinbase: 'bg-blue-600',
+    schwab: 'bg-sky-500'
   };
   
   const initials: Record<BrokerType, string> = {
     alpaca: 'A',
     interactive_brokers: 'IB',
     binance: 'B',
-    coinbase: 'C'
+    coinbase: 'C',
+    schwab: 'CS'
   };
   
   return (
@@ -235,16 +237,27 @@ export function BrokerSelector({
         
         {showPaperToggle && hasConnectedBroker && (
           <>
-            <div className="px-2 py-2 flex items-center justify-between">
+            <DropdownMenuItem
+              className="flex items-center justify-between cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault();
+                setIsPaperMode(!isPaperMode);
+              }}
+            >
               <div className="flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm">Paper Trading</span>
               </div>
-              <Switch
-                checked={isPaperMode}
-                onCheckedChange={setIsPaperMode}
-              />
-            </div>
+              <Badge 
+                variant={isPaperMode ? "default" : "secondary"}
+                className={cn(
+                  "text-[10px] px-2",
+                  isPaperMode ? "bg-green-500/20 text-green-500" : "bg-muted text-muted-foreground"
+                )}
+              >
+                {isPaperMode ? "ON" : "OFF"}
+              </Badge>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}

@@ -1,7 +1,7 @@
-import { useSocket } from "@/hooks/useSocket";
+import { useSocket, useAlpacaStreamStatus } from "@/hooks/useSocket";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Wifi, WifiOff, Loader2 } from "lucide-react";
+import { Wifi, WifiOff, Loader2, Zap, ZapOff } from "lucide-react";
 
 export function ConnectionStatus() {
   const { connectionStatus, latency } = useSocket();
@@ -64,6 +64,69 @@ export function ConnectionStatus() {
           <p className="font-medium">{config.label}</p>
           {connectionStatus === "connected" && latency !== null && (
             <p className="text-muted-foreground">Latency: {latency}ms</p>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// Alpaca stream status indicator
+export function AlpacaStreamStatus() {
+  const { status, isLoading } = useAlpacaStreamStatus();
+
+  if (isLoading) {
+    return (
+      <Badge variant="secondary" className="flex items-center gap-1.5 px-2 py-0.5 text-xs bg-muted/50">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        <span className="hidden sm:inline">Alpaca</span>
+      </Badge>
+    );
+  }
+
+  const isConnected = status?.connected && status?.authenticated;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          variant={isConnected ? "default" : "secondary"}
+          className={`flex items-center gap-1.5 px-2 py-0.5 text-xs cursor-default ${
+            isConnected
+              ? "bg-emerald-500/20 text-emerald-500 border-emerald-500/30"
+              : "bg-orange-500/20 text-orange-500 border-orange-500/30"
+          }`}
+        >
+          {isConnected ? (
+            <Zap className="h-3 w-3" />
+          ) : (
+            <ZapOff className="h-3 w-3" />
+          )}
+          <span className="hidden sm:inline">Alpaca</span>
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>
+        <div className="text-sm space-y-1">
+          <p className="font-medium">
+            Alpaca Stream: {isConnected ? "Connected" : "Disconnected"}
+          </p>
+          {status && (
+            <>
+              <p className="text-muted-foreground">
+                Auth: {status.authenticated ? "✓" : "✗"}
+              </p>
+              {status.subscribedSymbols && status.subscribedSymbols.length > 0 && (
+                <p className="text-muted-foreground">
+                  Symbols: {status.subscribedSymbols.slice(0, 5).join(", ")}
+                  {status.subscribedSymbols.length > 5 && ` +${status.subscribedSymbols.length - 5} more`}
+                </p>
+              )}
+              {status.reconnectAttempts > 0 && (
+                <p className="text-orange-500">
+                  Reconnect attempts: {status.reconnectAttempts}
+                </p>
+              )}
+            </>
           )}
         </div>
       </TooltipContent>

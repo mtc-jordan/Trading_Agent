@@ -1,9 +1,0 @@
-{
-  "query": "CREATE TABLE IF NOT EXISTS template_performance (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  templateId VARCHAR(100) NOT NULL,\n  snapshotDate DATE NOT NULL,\n  portfolioValue DECIMAL(18, 2) NOT NULL,\n  dailyReturn DECIMAL(10, 6),\n  cumulativeReturn DECIMAL(10, 6),\n  volatility DECIMAL(10, 6),\n  sharpeRatio DECIMAL(10, 4),\n  maxDrawdown DECIMAL(10, 6),\n  winRate DECIMAL(10, 4),\n  totalTrades INT DEFAULT 0,\n  positions JSON,\n  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  UNIQUE KEY unique_snapshot (templateId, snapshotDate),\n  INDEX idx_template (templateId),\n  INDEX idx_date (snapshotDate)\n);",
-  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2JvR2JmsVzzzo8g.542b2be615eb --database cYbBY4G8kX53fA5ZWwbsKK --execute CREATE TABLE IF NOT EXISTS template_performance (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  templateId VARCHAR(100) NOT NULL,\n  snapshotDate DATE NOT NULL,\n  portfolioValue DECIMAL(18, 2) NOT NULL,\n  dailyReturn DECIMAL(10, 6),\n  cumulativeReturn DECIMAL(10, 6),\n  volatility DECIMAL(10, 6),\n  sharpeRatio DECIMAL(10, 4),\n  maxDrawdown DECIMAL(10, 6),\n  winRate DECIMAL(10, 4),\n  totalTrades INT DEFAULT 0,\n  positions JSON,\n  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  UNIQUE KEY unique_snapshot (templateId, snapshotDate),\n  INDEX idx_template (templateId),\n  INDEX idx_date (snapshotDate)\n);",
-  "rows": [],
-  "messages": [],
-  "stdout": "",
-  "stderr": "",
-  "execution_time_ms": 1638
-}
